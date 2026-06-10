@@ -1,20 +1,18 @@
 """
-監視役エージェント
-  - 未読記事をLLMで分析（ポジティブ/ネガティブ/中立）
-  - ポジティブ/ネガティブのみLINEで一斉通知
+精査役エージェント
+  - 未読記事をLLMでまとめて分析（ポジティブ/ネガティブ/中立 + 関連銘柄）
+  - 銘柄が特定できたポジ/ネガ記事だけをシグナルとしてDBに蓄積する
+  - 通知は行わない（通知役 monitor.digest が朝にまとめて配信）
   - 実行: python -m monitor.agent
 """
 from __future__ import annotations
 
 import logging
-import os
 import sys
 
 from store.db import migrate
-from store import repository
-from store.recipients import get_all as get_recipients
-from monitor.analyzer import analyze
-from monitor.notifier import send
+from store import repository, signals
+from monitor.analyzer import analyze_batch
 
 logging.basicConfig(
     level=logging.INFO,
@@ -31,30 +29,38 @@ def run() -> None:
         logger.info("No unread articles")
         return
 
-    recipients = get_recipients()
-    logger.info("Processing %d unread articles for %d recipients", len(articles), len(recipients))
+    logger.info("Analyzing %d unread articles", len(articles))
+    results = analyze_batch(articles)
 
-    notified = 0
+    signal_count = 0
     skipped = 0
-    for article in articles:
-        try:
-            result = analyze(article.title, article.body)
+    failed = 0
+    processed_ids = []
+    for article, result in results:
+        if result is None:
+            failed += 1
+            continue  # 分析失敗分は未読のまま残し、次回再挑戦する
+        if result.sentiment in ("positive", "negative") and result.stocks:
+            signals.add(article.id, result.sentiment, result.summary, result.stocks, article.url)
+            signal_count += 1
             logger.info(
-                "Article %d: sentiment=%s, stocks=%s",
+                "Signal: article %d, %s, stocks=%s",
                 article.id,
                 result.sentiment,
                 [s["code"] for s in result.stocks],
             )
-            if result.sentiment in ("positive", "negative"):
-                send(result, article.url, recipients)
-                notified += 1
-            else:
-                skipped += 1
-            repository.mark_as_read(article.id)
-        except Exception:
-            logger.warning("Failed to process article %d", article.id, exc_info=True)
+        else:
+            skipped += 1
+        processed_ids.append(article.id)
 
-    logger.info("Done: %d notified, %d skipped (neutral)", notified, skipped)
+    if processed_ids:
+        repository.mark_many_as_read(processed_ids)
+    logger.info(
+        "Done: %d signals, %d skipped (neutral/no-stock), %d failed",
+        signal_count,
+        skipped,
+        failed,
+    )
 
 
 if __name__ == "__main__":

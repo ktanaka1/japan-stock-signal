@@ -20,11 +20,14 @@ _MAX_RECIPIENTS_PER_CALL = 500
 
 def send(result: AnalysisResult, url: str, recipients: List[str]) -> None:
     """分析結果をLINEで送信する。受信者がいない場合はスキップ。"""
+    send_text(_format_message(result, url), recipients)
+
+
+def send_text(text: str, recipients: List[str]) -> None:
+    """テキストをLINE Multicastで送信する。受信者がいない場合はスキップ。"""
     if not recipients:
         logger.info("No recipients registered, skipping notification")
         return
-
-    text = _format_message(result, url)
 
     if os.getenv("DRY_RUN", "").lower() == "true":
         logger.info("[DRY RUN] Would send LINE message to %d recipients:\n%s", len(recipients), text)

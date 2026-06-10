@@ -76,6 +76,8 @@ async def trigger_job(job_name: str, request: Request, background: BackgroundTas
         from collector.agent import run
     elif job_name == "monitor":
         from monitor.agent import run
+    elif job_name == "digest":
+        from monitor.digest import run
     else:
         raise HTTPException(status_code=404, detail="Unknown job")
 

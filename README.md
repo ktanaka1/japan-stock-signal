@@ -4,18 +4,23 @@
 
 ## 機能
 
-- 市場時間中（9:00〜15:30）にRSSフィードを定期収集
-- Google Gemini でニュースをポジティブ/ネガティブ/中立に分類し、関連銘柄を特定
-- LINEボットをフォローした人全員に自動通知
+- 毎日6:00〜23:00にRSSフィードを1時間ごとに収集（週末も稼働）
+- Google Gemini でニュースをまとめて分析し、銘柄が特定できたポジ/ネガ記事だけをシグナルとして蓄積
+- **平日朝7:30に、前回配信以降のシグナルをリスト形式の1通でLINE配信**（デイリーダイジェスト）
 - フォロー/アンフォローで受信者を自己管理
 
 ## 通知フォーマット
 
 ```
-📰 トヨタ自動車の営業利益が過去最高を更新しました。
-✅ ポジティブ
-🎯 関連銘柄：トヨタ自動車(7203)
-🔗 https://...
+📋 6/12(金) 朝のシグナル 8件
+
+✅ トヨタ自動車(7203)
+　通期営業利益を上方修正
+　https://...
+
+❌ ソニーG(6758)
+　主力事業で減損計上へ
+　https://...
 ```
 
 ---
@@ -61,16 +66,23 @@ DBは環境変数で自動的に切り替わります。`CLOUDFLARE_*` 3つが�
 python -m collector.agent
 ```
 
-### 監視役（LLM分析 + LINE通知）
+### 精査役（LLM分析 → シグナル蓄積）
 
 ```bash
 python -m monitor.agent
 ```
 
-動作確認（APIキーなし）:
+### 通知役（朝のダイジェスト配信）
+
+```bash
+python -m monitor.digest
+```
+
+動作確認（APIキーなし・LINE送信なし）:
 
 ```bash
 DRY_RUN=true python -m monitor.agent
+DRY_RUN=true python -m monitor.digest
 ```
 
 ### Webhookサーバー（LINE フォロー/アンフォロー受信）
@@ -106,7 +118,7 @@ uvicorn webhook.app:app --host 0.0.0.0 --port 8000
 
 `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_D1_DATABASE_ID` / `CLOUDFLARE_API_TOKEN` / `GEMINI_API_KEY` / `LINE_CHANNEL_ACCESS_TOKEN`
 
-- スケジュール: 平日 9:00〜15:55 JST に5分ごと（collector）、その2分後（monitor）
+- スケジュール（すべてJST）: collector = 毎日6:00〜23:00の1時間ごと / monitor = 毎日7:10〜23:10の2時間ごと / digest = 平日7:30
 - 手動実行: Actionsタブ → 各workflow → 「Run workflow」で動作確認可能
 
 > **注意（プライベートリポジトリの場合）**: 無料枠は月2,000分。この頻度だと月3,000分超で不足します。

@@ -19,7 +19,7 @@ load_dotenv()
 
 DB_PATH = os.environ.get("DB_PATH", "data/stock_signal.db")
 
-_MIGRATION_SQL = Path(__file__).parent.parent / "migrations" / "001_init.sql"
+_MIGRATIONS_DIR = Path(__file__).parent.parent / "migrations"
 _D1_ENDPOINT = (
     "https://api.cloudflare.com/client/v4"
     "/accounts/{account_id}/d1/database/{database_id}/query"
@@ -41,17 +41,18 @@ def execute(sql: str, params: tuple = ()) -> QueryResult:
 
 
 def migrate() -> None:
-    """マイグレーションSQLを実行してテーブルを初期化する。"""
-    script = _MIGRATION_SQL.read_text()
-    if _use_d1():
-        _d1_query(script, [])
-    else:
-        conn = _sqlite_connection()
-        try:
-            with conn:
-                conn.executescript(script)
-        finally:
-            conn.close()
+    """migrations/ 配下のSQLをファイル名順に実行してテーブルを初期化する。"""
+    for sql_path in sorted(_MIGRATIONS_DIR.glob("*.sql")):
+        script = sql_path.read_text()
+        if _use_d1():
+            _d1_query(script, [])
+        else:
+            conn = _sqlite_connection()
+            try:
+                with conn:
+                    conn.executescript(script)
+            finally:
+                conn.close()
 
 
 def _use_d1() -> bool:

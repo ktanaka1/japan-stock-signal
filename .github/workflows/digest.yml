@@ -1,15 +1,15 @@
-# データ収集役: RSS収集 → D1に保存
-# 毎日 JST 6:00〜23:00 に1時間ごと（週末も収集し、月曜朝のダイジェストに含める）
-# cronはUTC指定: JST 6:00〜23:00 = UTC 21:00〜14:00
-name: collector
+# 通知役: たまったシグナルをリスト形式の1通にまとめてLINE配信
+# 平日 JST 朝7:30（シグナルゼロの日は何も送らない）
+# cronはUTC指定: JST 月〜金 7:30 = UTC 日〜木 22:30
+name: digest
 
 on:
   schedule:
-    - cron: "0 0-14,21-23 * * *"
+    - cron: "30 22 * * 0-4"
   workflow_dispatch:
 
 jobs:
-  collect:
+  digest:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -19,8 +19,9 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
-      - run: python -m collector.agent
+      - run: python -m monitor.digest
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_D1_DATABASE_ID: ${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}

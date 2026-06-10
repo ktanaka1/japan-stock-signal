@@ -70,3 +70,15 @@ def mark_as_read(article_id: int) -> None:
         "UPDATE articles SET is_read = 1 WHERE id = ?",
         (article_id,),
     )
+
+
+def mark_many_as_read(article_ids: list[int]) -> None:
+    """記事をまとめて既読にする。"""
+    chunk_size = 50
+    for i in range(0, len(article_ids), chunk_size):
+        chunk = article_ids[i : i + chunk_size]
+        placeholders = ", ".join(["?"] * len(chunk))
+        execute(
+            f"UPDATE articles SET is_read = 1 WHERE id IN ({placeholders})",
+            tuple(chunk),
+        )
