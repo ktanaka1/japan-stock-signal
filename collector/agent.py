@@ -21,11 +21,7 @@ logger = logging.getLogger(__name__)
 def run() -> None:
     migrate()
     articles = fetch_all()
-    new_count = 0
-    for article in articles:
-        _, is_new = repository.save(article)
-        if is_new:
-            new_count += 1
+    new_count = repository.save_many(articles)
     logger.info("Collected %d articles, %d new", len(articles), new_count)
 
 

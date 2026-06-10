@@ -22,6 +22,25 @@ def save(article: Article) -> tuple[Article, bool]:
     return article, is_new
 
 
+def save_many(articles: list[Article]) -> int:
+    """記事をまとめて保存し、新規保存できた件数を返す。既存URLはスキップ。"""
+    # D1のREST APIは1クエリ=1リクエストなので、複数行VALUESでラウンドトリップを減らす
+    chunk_size = 30
+    new_count = 0
+    for i in range(0, len(articles), chunk_size):
+        chunk = articles[i : i + chunk_size]
+        placeholders = ", ".join(["(?, ?, ?)"] * len(chunk))
+        params: list = []
+        for a in chunk:
+            params.extend([a.title, a.body, a.url])
+        result = execute(
+            f"INSERT OR IGNORE INTO articles (title, body, url) VALUES {placeholders}",
+            tuple(params),
+        )
+        new_count += result.changes
+    return new_count
+
+
 def get_unread() -> list[Article]:
     """未読記事を取得日時の昇順で返す。"""
     result = execute(
