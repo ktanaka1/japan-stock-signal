@@ -1,6 +1,8 @@
-# 通知役: たまったシグナルをリスト形式の1通にまとめてLINE配信
+# 通知役: 収集→分析→配信を直列実行し、たまったシグナルをリスト形式の1通にまとめてLINE配信
 # 平日 JST 朝7:30（シグナルゼロの日は何も送らない）
 # cronはUTC指定: JST 月〜金 7:30 = UTC 日〜木 22:30
+# GitHub Actionsのcronは遅延・スキップがあり発火時刻は保証されないが、
+# 配信直前に収集・分析するため、何時に発火してもその時点の最新ニュースが乗る
 name: digest
 
 on:
@@ -11,7 +13,11 @@ on:
 jobs:
   digest:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_D1_DATABASE_ID: ${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -19,9 +25,13 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: pip install -r requirements.txt
-      - run: python -m monitor.digest
+      - name: 収集（配信直前の最新ニュースを取り込む）
+        run: python -m collector.agent
+      - name: 分析（未読記事をシグナル化する）
+        run: python -m monitor.agent
         env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_D1_DATABASE_ID: ${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      - name: 配信（未通知シグナルをLINEに送る）
+        run: python -m monitor.digest
+        env:
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
