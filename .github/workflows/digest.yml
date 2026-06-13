@@ -1,5 +1,6 @@
 # 通知役: 収集→分析→配信を直列実行し、たまったシグナルをリスト形式の1通にまとめてLINE配信
-# 平日 JST 朝7:30（シグナルゼロの日は何も送らない）
+# 平日 JST 朝7:30（シグナルゼロの日もその旨を1通送る）
+# 収集・分析はステップ単位でタイムアウト＆continue-on-errorとし、配信だけは必ず実行する
 # cronはUTC指定: JST 月〜金 7:30 = UTC 日〜木 22:30
 # GitHub Actionsのcronは遅延・スキップがあり発火時刻は保証されないが、
 # 配信直前に収集・分析するため、何時に発火してもその時点の最新ニュースが乗る
@@ -27,8 +28,12 @@ jobs:
       - run: pip install -r requirements.txt
       - name: 収集（配信直前の最新ニュースを取り込む）
         run: python -m collector.agent
+        timeout-minutes: 5
+        continue-on-error: true
       - name: 分析（未読記事をシグナル化する）
         run: python -m monitor.agent
+        timeout-minutes: 10
+        continue-on-error: true
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       - name: 配信（未通知シグナルをLINEに送る）

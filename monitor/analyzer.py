@@ -30,6 +30,10 @@ _BATCH_SYSTEM_PROMPT = (
 # Gemini無料枠は10リクエスト/分程度のため、バッチ間で待機する
 _BATCH_INTERVAL_SECONDS = 7
 
+# 連続でバッチが失敗したら打ち切る（日次クォータ枯渇時にリトライ待機で
+# ジョブのタイムアウトまで時間を浪費しないため。残りは未読のまま次回に回る）
+_MAX_CONSECUTIVE_FAILURES = 3
+
 
 @dataclass
 class AnalysisResult:
@@ -55,6 +59,7 @@ def analyze_batch(
     """
     dry_run = os.getenv("DRY_RUN", "").lower() == "true"
     results: List[Tuple[object, Optional[AnalysisResult]]] = []
+    consecutive_failures = 0
     for i in range(0, len(articles), batch_size):
         chunk = articles[i : i + batch_size]
         if dry_run:
@@ -64,9 +69,18 @@ def analyze_batch(
             time.sleep(_BATCH_INTERVAL_SECONDS)
         try:
             results.extend(_llm_analyze_batch(chunk))
+            consecutive_failures = 0
         except Exception:
             logger.exception("Batch analysis failed for articles %s", [a.id for a in chunk])
             results.extend((a, None) for a in chunk)
+            consecutive_failures += 1
+            if consecutive_failures >= _MAX_CONSECUTIVE_FAILURES:
+                logger.error(
+                    "Aborting after %d consecutive batch failures; %d articles left for next run",
+                    consecutive_failures,
+                    len(articles) - i - len(chunk),
+                )
+                break
     return results
 
 

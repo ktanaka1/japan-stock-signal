@@ -1,7 +1,7 @@
 """
 通知役エージェント
   - 未通知のシグナルをリスト形式の1通にまとめてLINE配信する
-  - シグナルゼロの日は何も送らない
+  - シグナルゼロの日もその旨を1通送る（無通知と障害を区別できるようにする）
   - 実行: python -m monitor.digest（平日 朝7:30 JST に起動される想定）
 """
 from __future__ import annotations
@@ -32,13 +32,14 @@ _MAX_MESSAGE_CHARS = 4500
 def run() -> None:
     migrate()
     items = signals.get_unnotified()
-    if not items:
-        logger.info("No signals to notify")
-        return
-
     recipients = get_recipients()
     if not recipients:
         logger.info("No recipients registered, keeping %d signals unnotified", len(items))
+        return
+
+    if not items:
+        logger.info("No signals; sending zero-signal notice")
+        send_text(_zero_signal_message(), recipients)
         return
 
     messages = _build_messages(items)
@@ -50,9 +51,17 @@ def run() -> None:
     logger.info("Done: %d signals notified", len(items))
 
 
-def _build_messages(items: list) -> list:
+def _header(count: int) -> str:
     now = datetime.now(JST)
-    header = f"📋 {now.month}/{now.day}({_WEEKDAYS[now.weekday()]}) 朝のシグナル {len(items)}件"
+    return f"📋 {now.month}/{now.day}({_WEEKDAYS[now.weekday()]}) 朝のシグナル {count}件"
+
+
+def _zero_signal_message() -> str:
+    return f"{_header(0)}\n\n昨日からのニュースに該当する銘柄はありませんでした。"
+
+
+def _build_messages(items: list) -> list:
+    header = _header(len(items))
 
     blocks = [_format_item(s) for s in items]
     messages = []
