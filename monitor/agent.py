@@ -13,6 +13,7 @@ import sys
 from store.db import migrate
 from store import repository, signals
 from monitor.analyzer import analyze_batch
+from monitor.mailer import send_analysis_report
 
 logging.basicConfig(
     level=logging.INFO,
@@ -36,12 +37,14 @@ def run() -> None:
     skipped = 0
     failed = 0
     processed_ids = []
+    signal_article_ids: set = set()
     for article, result in results:
         if result is None:
             failed += 1
             continue  # 分析失敗分は未読のまま残し、次回再挑戦する
         if result.sentiment in ("positive", "negative") and result.stocks:
             signals.add(article.id, result.sentiment, result.summary, result.stocks, article.url)
+            signal_article_ids.add(article.id)
             signal_count += 1
             logger.info(
                 "Signal: article %d, %s, stocks=%s",
@@ -61,6 +64,8 @@ def run() -> None:
         skipped,
         failed,
     )
+
+    send_analysis_report(results, signal_article_ids)
 
 
 if __name__ == "__main__":

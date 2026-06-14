@@ -17,6 +17,8 @@ _SYSTEM_PROMPT = (
     "ニュース記事を読み、以下のフィールドを必ず埋めてください：\n"
     "sentiment: positive（株価上昇要因）/ negative（株価下落要因）/ neutral（株価影響なし）\n"
     "summary: 日本語で1行、見出しのように簡潔な要約\n"
+    "reason: sentiment をそう判断した根拠を日本語で2〜3文で説明する。"
+    "中立と判断した場合はその理由も記載する。\n"
     "stocks: 関連する日本株銘柄のリスト（証券コード4桁と銘柄名）。"
     "銘柄が特定できない場合は空リストにする。"
 )
@@ -39,6 +41,7 @@ _MAX_CONSECUTIVE_FAILURES = 3
 class AnalysisResult:
     sentiment: str  # "positive" | "negative" | "neutral"
     summary: str
+    reason: str
     stocks: List[dict]  # [{"name": "日本製鉄", "code": "5401"}]
 
 
@@ -88,6 +91,7 @@ def _mock_analyze(title: str) -> AnalysisResult:
     return AnalysisResult(
         sentiment="positive",
         summary=f"[DRY RUN] {title[:60]}",
+        reason="[DRY RUN] モック判定のため根拠なし。",
         stocks=[{"name": "サンプル株式会社", "code": "9999"}],
     )
 
@@ -105,6 +109,7 @@ def _llm_analyze(title: str, body: str, _retry: int = 3) -> AnalysisResult:
     class Analysis(BaseModel):
         sentiment: Literal["positive", "negative", "neutral"]
         summary: str
+        reason: str
         stocks: List[Stock]
 
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
@@ -123,6 +128,7 @@ def _llm_analyze(title: str, body: str, _retry: int = 3) -> AnalysisResult:
             return AnalysisResult(
                 sentiment=result.sentiment,
                 summary=result.summary,
+                reason=result.reason,
                 stocks=[{"name": s.name, "code": s.code} for s in result.stocks],
             )
         except Exception as e:
@@ -149,6 +155,7 @@ def _llm_analyze_batch(
         index: int
         sentiment: Literal["positive", "negative", "neutral"]
         summary: str
+        reason: str
         stocks: List[Stock]
 
     class BatchAnalysis(BaseModel):
@@ -186,6 +193,7 @@ def _llm_analyze_batch(
                         AnalysisResult(
                             sentiment=item.sentiment,
                             summary=item.summary,
+                            reason=item.reason,
                             stocks=[{"name": s.name, "code": s.code} for s in item.stocks],
                         ),
                     )
