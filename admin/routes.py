@@ -16,7 +16,7 @@ JST = timezone(timedelta(hours=9))
 
 _COOKIE_NAME = "admin_session"
 _COOKIE_MAX_AGE = 60 * 60 * 24 * 30  # 30日
-_LIST_LIMIT = 500
+_PER_PAGE = 50
 
 router = APIRouter(prefix="/admin")
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -109,17 +109,25 @@ async def dashboard(request: Request, date: str = None, msg: str = None):
 
 
 @router.get("/articles", response_class=HTMLResponse)
-async def articles_view(request: Request, date: str = None):
+async def articles_view(
+    request: Request,
+    date: str = "",
+    sentiment: str = "",
+    page: int = 1,
+):
     if not _is_authed(request):
         return _login_redirect()
-    if not date:
-        date = _today_jst()
 
-    # 判定での絞り込みは読み込み済みデータをフロント側で出し分けるため、
-    # サーバーは日付分の全件を返すだけにする
+    page = max(1, page)
+    offset = (page - 1) * _PER_PAGE
+
     from store import analyses
-    rows = analyses.get_all_by_date(date, limit=_LIST_LIMIT)
-    truncated = len(rows) >= _LIST_LIMIT
+    rows, has_next = analyses.get_articles(
+        date_str=date or None,
+        sentiment=sentiment or None,
+        limit=_PER_PAGE,
+        offset=offset,
+    )
 
     for row in rows:
         row["fetched_at_jst"] = _to_jst_time(row.get("fetched_at", "") or "")
@@ -127,9 +135,12 @@ async def articles_view(request: Request, date: str = None):
     return templates.TemplateResponse("articles.html", {
         "request": request,
         "date": date,
+        "sentiment": sentiment,
+        "page": page,
+        "has_next": has_next,
+        "per_page": _PER_PAGE,
+        "offset": offset,
         "articles": rows,
-        "truncated": truncated,
-        "limit": _LIST_LIMIT,
     })
 
 

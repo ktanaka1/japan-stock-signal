@@ -29,10 +29,30 @@ def save(
     )
 
 
-def get_all_by_date(date_str: str, limit: int = 500) -> list[dict]:
-    """指定日(JST)の全記事を分析結果・シグナル情報付きで返す。未分析記事も含む。"""
-    rows = execute(
-        """
+def get_articles(
+    date_str: str | None = None,
+    sentiment: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> tuple[list[dict], bool]:
+    """記事を分析結果・シグナル情報付きで新しい順に返す。未分析記事も含む。
+
+    date_str / sentiment は任意のフィルタ。sentiment="none" は未分析記事のみ。
+    次ページの有無を判定するため limit+1 件取得し、(rows[:limit], has_next) を返す。
+    """
+    where = []
+    params: list = []
+    if date_str:
+        where.append("date(a.fetched_at, '+9 hours') = ?")
+        params.append(date_str)
+    if sentiment == "none":
+        where.append("aa.sentiment IS NULL")
+    elif sentiment:
+        where.append("aa.sentiment = ?")
+        params.append(sentiment)
+    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+
+    sql = f"""
         SELECT
             a.id          AS article_id,
             a.title,
@@ -48,15 +68,18 @@ def get_all_by_date(date_str: str, limit: int = 500) -> list[dict]:
         FROM articles a
         LEFT JOIN article_analyses aa ON a.id = aa.article_id
         LEFT JOIN signals s ON a.id = s.article_id
-        WHERE date(a.fetched_at, '+9 hours') = ?
+        {where_sql}
         ORDER BY a.fetched_at DESC
-        LIMIT ?
-        """,
-        (date_str, limit),
-    ).rows
+        LIMIT ? OFFSET ?
+    """
+    params.extend([limit + 1, offset])
+    rows = execute(sql, tuple(params)).rows
+
+    has_next = len(rows) > limit
+    rows = rows[:limit]
     for row in rows:
         row["stocks"] = json.loads(row["stocks"]) if row.get("stocks") else []
-    return rows
+    return rows, has_next
 
 
 def get_stats_by_date(date_str: str) -> dict:

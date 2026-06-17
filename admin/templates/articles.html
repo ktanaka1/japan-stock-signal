@@ -5,24 +5,26 @@
 <div class="card">
   <h2>記事一覧</h2>
   <div class="filters">
-    <!-- 日付はその日のデータ取得が必要なのでサーバー往復 -->
-    <form method="get" action="/admin/articles" style="display:flex; gap:10px; align-items:center">
-      <input type="date" name="date" value="{{ date }}" onchange="this.form.submit()">
+    <!-- 日付・判定を変えると page=1 から再取得（hidden の page は付けない） -->
+    <form method="get" action="/admin/articles" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap">
+      <label style="display:flex; align-items:center; gap:6px; font-weight:normal">
+        日付
+        <input type="date" name="date" value="{{ date }}" onchange="this.form.submit()">
+      </label>
+      {% if date %}<a href="/admin/articles{% if sentiment %}?sentiment={{ sentiment }}{% endif %}" style="font-size:0.82rem">日付クリア</a>{% endif %}
+      <select name="sentiment" onchange="this.form.submit()">
+        <option value="">すべての判定</option>
+        <option value="positive" {% if sentiment == 'positive' %}selected{% endif %}>ポジティブ</option>
+        <option value="negative" {% if sentiment == 'negative' %}selected{% endif %}>ネガティブ</option>
+        <option value="neutral"  {% if sentiment == 'neutral'  %}selected{% endif %}>中立</option>
+        <option value="none"     {% if sentiment == 'none'     %}selected{% endif %}>未分析</option>
+      </select>
     </form>
-    <!-- 判定の絞り込みは読み込み済みデータをフロントで出し分け（サーバー往復なし） -->
-    <select id="sentiment-filter" onchange="filterRows()">
-      <option value="">すべて</option>
-      <option value="positive">ポジティブ</option>
-      <option value="negative">ネガティブ</option>
-      <option value="neutral">中立</option>
-      <option value="none">未分析</option>
-    </select>
-    <span class="text-muted"><span id="visible-count">{{ articles | length }}</span> 件</span>
+    <span class="text-muted">
+      {% if articles %}{{ offset + 1 }}〜{{ offset + articles | length }} 件目{% else %}該当なし{% endif %}
+      （{{ page }}ページ）
+    </span>
   </div>
-
-  {% if truncated %}
-  <div class="flash flash-err">表示上限（{{ limit }}件）に達しました。この日の記事はさらに存在しますが、新しい順に{{ limit }}件のみ表示しています。</div>
-  {% endif %}
 
   <table>
     <thead>
@@ -38,7 +40,7 @@
     </thead>
     <tbody>
       {% for a in articles %}
-      <tr class="article-row" data-sentiment="{{ a.sentiment or 'none' }}">
+      <tr>
         <td style="white-space:nowrap; color:#999; font-size:0.82rem">{{ a.fetched_at_jst }}</td>
         <td>
           <a href="{{ a.url }}" target="_blank" rel="noopener" class="trunc" title="{{ a.title }}">{{ a.title }}</a>
@@ -80,20 +82,21 @@
       {% endif %}
     </tbody>
   </table>
-</div>
 
-<script>
-  function filterRows() {
-    var sel = document.getElementById('sentiment-filter').value;
-    var rows = document.querySelectorAll('tr.article-row');
-    var visible = 0;
-    rows.forEach(function (row) {
-      var match = !sel || row.dataset.sentiment === sel;
-      row.style.display = match ? '' : 'none';
-      if (match) visible++;
-    });
-    document.getElementById('visible-count').textContent = visible;
-  }
-</script>
+  {% set qs = '&date=' ~ date if date else '' %}
+  {% set qs = qs ~ ('&sentiment=' ~ sentiment if sentiment else '') %}
+  <div style="display:flex; justify-content:space-between; margin-top:18px">
+    {% if page > 1 %}
+      <a class="btn btn-primary" href="/admin/articles?page={{ page - 1 }}{{ qs }}">← 前へ</a>
+    {% else %}
+      <span></span>
+    {% endif %}
+    {% if has_next %}
+      <a class="btn btn-primary" href="/admin/articles?page={{ page + 1 }}{{ qs }}">次へ →</a>
+    {% else %}
+      <span></span>
+    {% endif %}
+  </div>
+</div>
 
 {% endblock %}
