@@ -6,15 +6,14 @@
   <h2>記事一覧</h2>
   <div class="filters">
     <form method="get" action="/admin/articles" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap">
-      <input type="date" name="date" value="{{ date }}">
-      <select name="sentiment">
+      <input type="date" name="date" value="{{ date }}" onchange="this.form.submit()">
+      <select name="sentiment" onchange="this.form.submit()">
         <option value="">すべて</option>
         <option value="positive" {% if sentiment == 'positive' %}selected{% endif %}>ポジティブ</option>
         <option value="negative" {% if sentiment == 'negative' %}selected{% endif %}>ネガティブ</option>
         <option value="neutral"  {% if sentiment == 'neutral'  %}selected{% endif %}>中立</option>
         <option value="none"     {% if sentiment == 'none'     %}selected{% endif %}>未分析</option>
       </select>
-      <button class="btn btn-primary" type="submit">絞り込み</button>
     </form>
     <span class="text-muted">{{ articles | length }} 件</span>
   </div>

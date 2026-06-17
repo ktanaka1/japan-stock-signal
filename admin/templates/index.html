@@ -4,8 +4,7 @@
 <div class="card">
   <h2>パイプライン統計</h2>
   <form method="get" action="/admin" style="margin-bottom:20px; display:flex; gap:10px; align-items:center">
-    <input type="date" name="date" value="{{ date }}">
-    <button class="btn btn-primary" type="submit">表示</button>
+    <input type="date" name="date" value="{{ date }}" onchange="this.form.submit()">
   </form>
   <div class="stats">
     <div class="stat">
