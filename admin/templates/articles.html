@@ -3,6 +3,7 @@
 {% block content %}
 
 {% set qs = '&date=' ~ date if date else '' %}
+{% set qs = qs ~ '&year=' ~ year %}
 {% set qs = qs ~ ('&sentiment=' ~ sentiment if sentiment else '') %}
 {% set qs = qs ~ ('&code=' ~ code if code else '') %}
 {% set qs = qs ~ '&per_page=' ~ per_page %}
@@ -38,6 +39,12 @@
           {% endif %}
         </span>
       </label>
+      <select name="year" onchange="this.form.submit()" title="対象年（日付指定時は無効）">
+        <option value="all" {% if year == 'all' %}selected{% endif %}>すべての年</option>
+        {% for y in available_years %}
+        <option value="{{ y }}" {% if year == y %}selected{% endif %}>{{ y }}年</option>
+        {% endfor %}
+      </select>
       <select name="sentiment" onchange="this.form.submit()">
         <option value="">すべて</option>
         <option value="positive" {% if sentiment == 'positive' %}selected{% endif %}>ポジティブ</option>

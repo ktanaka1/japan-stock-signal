@@ -113,6 +113,7 @@ async def dashboard(request: Request, date: str = None, msg: str = None):
 async def articles_view(
     request: Request,
     date: str = "",
+    year: str = "",
     sentiment: str = "",
     code: str = "",
     page: int = 1,
@@ -126,10 +127,21 @@ async def articles_view(
         per_page = _PER_PAGE
     offset = (page - 1) * per_page
 
+    # 年フィルタ: 未指定なら当年がデフォルト。"all" で全期間。
+    # 特定日(date)を指定したときは年フィルタを無効にする（日付が優先）。
+    current_year = datetime.now(JST).strftime("%Y")
+    if not year:
+        year = current_year
+    year_filter = None if (date or year == "all") else year
+
     code = code.strip()
     from store import analyses
+    available_years = analyses.get_available_years()
+    if current_year not in available_years:
+        available_years = [current_year] + available_years
     rows, has_next = analyses.get_articles(
         date_str=date or None,
+        year=year_filter,
         sentiment=sentiment or None,
         code=code or None,
         limit=per_page,
@@ -142,6 +154,8 @@ async def articles_view(
     return templates.TemplateResponse("articles.html", {
         "request": request,
         "date": date,
+        "year": year,
+        "available_years": available_years,
         "sentiment": sentiment,
         "code": code,
         "page": page,

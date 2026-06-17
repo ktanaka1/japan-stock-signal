@@ -29,8 +29,18 @@ def save(
     )
 
 
+def get_available_years() -> list[str]:
+    """記事が存在する年（JST）を新しい順に返す。"""
+    rows = execute(
+        "SELECT DISTINCT strftime('%Y', fetched_at, '+9 hours') AS y "
+        "FROM articles ORDER BY y DESC"
+    ).rows
+    return [r["y"] for r in rows if r["y"]]
+
+
 def get_articles(
     date_str: str | None = None,
+    year: str | None = None,
     sentiment: str | None = None,
     code: str | None = None,
     limit: int = 50,
@@ -38,8 +48,8 @@ def get_articles(
 ) -> tuple[list[dict], bool]:
     """記事を分析結果・シグナル情報付きで新しい順に返す。未分析記事も含む。
 
-    date_str / sentiment / code は任意のフィルタ。sentiment="none" は未分析記事のみ。
-    code は銘柄コードの前方一致（stocks JSON内のいずれかのcodeにマッチ）。
+    date_str / year / sentiment / code は任意のフィルタ。sentiment="none" は未分析記事のみ。
+    year は対象年(JST)。code は銘柄コードの前方一致（stocks JSON内のいずれかのcodeにマッチ）。
     次ページの有無を判定するため limit+1 件取得し、(rows[:limit], has_next) を返す。
     """
     where = []
@@ -47,6 +57,9 @@ def get_articles(
     if date_str:
         where.append("date(a.fetched_at, '+9 hours') = ?")
         params.append(date_str)
+    elif year:
+        where.append("strftime('%Y', a.fetched_at, '+9 hours') = ?")
+        params.append(year)
     if sentiment == "none":
         where.append("aa.sentiment IS NULL")
     elif sentiment:
