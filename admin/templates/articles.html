@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}記事一覧 - 株シグナル管理{% endblock %}
+{% block content %}
+
+<div class="card">
+  <h2>記事一覧</h2>
+  <div class="filters">
+    <form method="get" action="/admin/articles" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap">
+      <input type="date" name="date" value="{{ date }}">
+      <select name="sentiment">
+        <option value="">すべて</option>
+        <option value="positive" {% if sentiment == 'positive' %}selected{% endif %}>ポジティブ</option>
+        <option value="negative" {% if sentiment == 'negative' %}selected{% endif %}>ネガティブ</option>
+        <option value="neutral"  {% if sentiment == 'neutral'  %}selected{% endif %}>中立</option>
+        <option value="none"     {% if sentiment == 'none'     %}selected{% endif %}>未分析</option>
+      </select>
+      <button class="btn btn-primary" type="submit">絞り込み</button>
+    </form>
+    <span class="text-muted">{{ articles | length }} 件</span>
+  </div>
+
+  {% if truncated %}
+  <div class="flash flash-err">表示上限（{{ limit }}件）に達しました。この日の記事はさらに存在しますが、新しい順に{{ limit }}件のみ表示しています。</div>
+  {% endif %}
+
+  <table>
+    <thead>
+      <tr>
+        <th>取得時刻</th>
+        <th>タイトル</th>
+        <th>判定</th>
+        <th>銘柄</th>
+        <th>要約 / 判断根拠</th>
+        <th>シグナル</th>
+        <th>通知</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in articles %}
+      <tr>
+        <td style="white-space:nowrap; color:#999; font-size:0.82rem">{{ a.fetched_at_jst }}</td>
+        <td>
+          <a href="{{ a.url }}" target="_blank" rel="noopener" class="trunc" title="{{ a.title }}">{{ a.title }}</a>
+        </td>
+        <td>
+          {% if a.sentiment == 'positive' %}
+            <span class="badge b-pos">ポジ</span>
+          {% elif a.sentiment == 'negative' %}
+            <span class="badge b-neg">ネガ</span>
+          {% elif a.sentiment == 'neutral' %}
+            <span class="badge b-neu">中立</span>
+          {% else %}
+            <span class="badge b-none">未分析</span>
+          {% endif %}
+        </td>
+        <td style="font-size:0.82rem; white-space:nowrap">
+          {% for s in a.stocks %}
+            <div>{{ s.name }}<br><span class="text-muted">{{ s.code }}</span></div>
+          {% endfor %}
+        </td>
+        <td style="max-width:340px">
+          {% if a.summary %}
+            <div style="font-weight:500; margin-bottom:4px">{{ a.summary }}</div>
+            <div class="text-muted" style="font-size:0.82rem">{{ a.reason }}</div>
+          {% endif %}
+        </td>
+        <td style="text-align:center">
+          {% if a.became_signal %}<span class="badge b-sig">✓</span>{% endif %}
+        </td>
+        <td style="text-align:center">
+          {% if a.notified_at %}<span class="badge b-ntf">済</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      {% if not articles %}
+      <tr>
+        <td colspan="7" style="text-align:center; color:#bbb; padding:40px">データなし</td>
+      </tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}

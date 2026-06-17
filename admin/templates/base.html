@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>{% block title %}株シグナル 管理{% endblock %}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; background: #f4f6f9; color: #333; font-size: 14px; }
+    header { background: #1a1a2e; color: white; padding: 12px 24px; display: flex; align-items: center; gap: 28px; }
+    header strong { font-size: 1rem; color: white; }
+    header a { color: #9aa; text-decoration: none; font-size: 0.9rem; }
+    header a:hover { color: white; }
+    .main { max-width: 1300px; margin: 24px auto; padding: 0 24px; }
+    .card { background: white; border-radius: 8px; padding: 20px 24px; margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.07); }
+    .card h2 { margin: 0 0 16px; font-size: 0.8rem; color: #888; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+    .stats { display: flex; gap: 40px; flex-wrap: wrap; }
+    .stat .n { font-size: 2rem; font-weight: 700; line-height: 1; }
+    .stat .l { font-size: 0.8rem; color: #999; margin-top: 4px; }
+    .c-pos { color: #28a745; }
+    .c-neg { color: #dc3545; }
+    .c-neu { color: #6c757d; }
+    table { width: 100%; border-collapse: collapse; }
+    th { background: #f8f9fa; padding: 8px 12px; text-align: left; font-weight: 500; color: #666; border-bottom: 2px solid #e9ecef; white-space: nowrap; font-size: 0.82rem; }
+    td { padding: 8px 12px; border-bottom: 1px solid #f0f2f5; vertical-align: top; }
+    tr:hover td { background: #fafbfd; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 0.78rem; white-space: nowrap; }
+    .b-pos { background: #d4edda; color: #155724; }
+    .b-neg { background: #f8d7da; color: #721c24; }
+    .b-neu { background: #e2e3e5; color: #383d41; }
+    .b-sig { background: #cce5ff; color: #004085; }
+    .b-ntf { background: #fff3cd; color: #856404; }
+    .b-none { background: #f8f9fa; color: #aaa; border: 1px solid #e9ecef; }
+    .btn { display: inline-block; padding: 7px 16px; border-radius: 5px; border: none; cursor: pointer; font-size: 0.88rem; text-decoration: none; font-family: inherit; }
+    .btn-primary { background: #007bff; color: white; }
+    .btn-primary:hover { background: #0069d9; }
+    .btn-success { background: #28a745; color: white; }
+    .btn-success:hover { background: #218838; }
+    input[type=date], input[type=number], select { border: 1px solid #ced4da; border-radius: 4px; padding: 6px 10px; font-size: 0.88rem; font-family: inherit; }
+    textarea { border: 1px solid #ced4da; border-radius: 4px; padding: 8px 10px; font-size: 0.88rem; font-family: monospace; width: 100%; resize: vertical; }
+    .form-group { margin-bottom: 18px; }
+    .form-group label { display: block; font-weight: 500; margin-bottom: 6px; }
+    .form-group small { color: #888; font-weight: normal; }
+    .flash { padding: 10px 16px; border-radius: 5px; margin-bottom: 16px; font-size: 0.9rem; }
+    .flash-ok  { background: #d4edda; color: #155724; }
+    .flash-err { background: #f8d7da; color: #721c24; }
+    .trunc { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+    a { color: #007bff; }
+    .filters { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+    .text-muted { color: #999; }
+    .checkbox-group label { display: inline-flex; align-items: center; gap: 6px; font-weight: normal; margin-right: 16px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>株シグナル 管理</strong>
+    <a href="/admin">ダッシュボード</a>
+    <a href="/admin/articles">記事一覧</a>
+    <a href="/admin/settings">条件設定</a>
+    <a href="/admin/logout" style="margin-left:auto">ログアウト</a>
+  </header>
+  <div class="main">
+    {% if msg %}<div class="flash flash-ok">{{ msg }}</div>{% endif %}
+    {% if err %}<div class="flash flash-err">{{ err }}</div>{% endif %}
+    {% block content %}{% endblock %}
+  </div>
+</body>
+</html>

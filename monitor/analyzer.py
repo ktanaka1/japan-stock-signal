@@ -53,13 +53,26 @@ def analyze(title: str, body: str) -> AnalysisResult:
 
 
 def analyze_batch(
-    articles: list, batch_size: int = 10
+    articles: list,
+    batch_size: int = 10,
+    system_prompt: str | None = None,
+    batch_interval: int | None = None,
+    max_failures: int | None = None,
 ) -> List[Tuple[object, Optional[AnalysisResult]]]:
     """記事リストをbatch_size件ずつまとめて分析し、(article, result) のリストを返す。
 
     1回のLLM呼び出しで複数記事を処理してリクエスト数を抑える。
     結果が返らなかった記事は result=None になる。
     """
+    interval = batch_interval if batch_interval is not None else _BATCH_INTERVAL_SECONDS
+    failures_limit = max_failures if max_failures is not None else _MAX_CONSECUTIVE_FAILURES
+    prompt = system_prompt if system_prompt else _SYSTEM_PROMPT
+    effective_batch_prompt = (
+        prompt
+        + "\n複数の記事が番号付きで与えられます。"
+        "記事ごとに1つの結果を返し、index フィールドに記事番号をそのまま入れてください。"
+    )
+
     dry_run = os.getenv("DRY_RUN", "").lower() == "true"
     results: List[Tuple[object, Optional[AnalysisResult]]] = []
     consecutive_failures = 0
@@ -69,15 +82,15 @@ def analyze_batch(
             results.extend((a, _mock_analyze(a.title)) for a in chunk)
             continue
         if i > 0:
-            time.sleep(_BATCH_INTERVAL_SECONDS)
+            time.sleep(interval)
         try:
-            results.extend(_llm_analyze_batch(chunk))
+            results.extend(_llm_analyze_batch(chunk, system_prompt=effective_batch_prompt))
             consecutive_failures = 0
         except Exception:
             logger.exception("Batch analysis failed for articles %s", [a.id for a in chunk])
             results.extend((a, None) for a in chunk)
             consecutive_failures += 1
-            if consecutive_failures >= _MAX_CONSECUTIVE_FAILURES:
+            if consecutive_failures >= failures_limit:
                 logger.error(
                     "Aborting after %d consecutive batch failures; %d articles left for next run",
                     consecutive_failures,
@@ -141,7 +154,7 @@ def _llm_analyze(title: str, body: str, _retry: int = 3) -> AnalysisResult:
 
 
 def _llm_analyze_batch(
-    articles: list, _retry: int = 3
+    articles: list, system_prompt: str = _BATCH_SYSTEM_PROMPT, _retry: int = 3
 ) -> List[Tuple[object, Optional[AnalysisResult]]]:
     from pydantic import BaseModel
     from google import genai
@@ -173,7 +186,7 @@ def _llm_analyze_batch(
                 model="gemini-2.5-flash",
                 contents=contents,
                 config=types.GenerateContentConfig(
-                    system_instruction=_BATCH_SYSTEM_PROMPT,
+                    system_instruction=system_prompt,
                     response_mime_type="application/json",
                     response_schema=BatchAnalysis,
                 ),

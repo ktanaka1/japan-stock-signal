@@ -11,7 +11,8 @@ import logging
 import sys
 
 from store.db import migrate
-from store import repository, signals
+from store import repository, signals, analyses
+from store import settings as cfg
 from monitor.analyzer import analyze_batch
 from monitor.mailer import send_analysis_report
 
@@ -25,13 +26,23 @@ logger = logging.getLogger(__name__)
 
 def run() -> None:
     migrate()
+    settings = cfg.get_all()
+
     articles = repository.get_unread()
     if not articles:
         logger.info("No unread articles")
         return
 
     logger.info("Analyzing %d unread articles", len(articles))
-    results = analyze_batch(articles)
+    results = analyze_batch(
+        articles,
+        system_prompt=settings["gemini_system_prompt"],
+        batch_interval=int(settings["batch_interval_seconds"]),
+        max_failures=int(settings["max_consecutive_failures"]),
+    )
+
+    signal_sentiments = set(settings["signal_sentiments"].split(","))
+    require_stocks = settings["signal_require_stocks"].lower() == "true"
 
     signal_count = 0
     skipped = 0
@@ -42,7 +53,8 @@ def run() -> None:
         if result is None:
             failed += 1
             continue  # 分析失敗分は未読のまま残し、次回再挑戦する
-        if result.sentiment in ("positive", "negative") and result.stocks:
+        is_signal = result.sentiment in signal_sentiments and (not require_stocks or bool(result.stocks))
+        if is_signal:
             signals.add(article.id, result.sentiment, result.summary, result.stocks, article.url)
             signal_article_ids.add(article.id)
             signal_count += 1
@@ -54,6 +66,9 @@ def run() -> None:
             )
         else:
             skipped += 1
+        analyses.save(
+            article.id, result.sentiment, result.summary, result.reason, result.stocks, is_signal
+        )
         processed_ids.append(article.id)
 
     if processed_ids:

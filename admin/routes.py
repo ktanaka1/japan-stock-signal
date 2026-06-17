@@ -1,0 +1,216 @@
+"""管理画面ルート。ADMIN_TOKEN を HttpOnly Cookie に保存して認証する。"""
+from __future__ import annotations
+
+import hmac
+import logging
+import os
+from datetime import datetime, timezone, timedelta
+from pathlib import Path
+
+from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+
+logger = logging.getLogger(__name__)
+JST = timezone(timedelta(hours=9))
+
+_COOKIE_NAME = "admin_session"
+_COOKIE_MAX_AGE = 60 * 60 * 24 * 30  # 30日
+_LIST_LIMIT = 500
+
+router = APIRouter(prefix="/admin")
+templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+
+
+def _is_authed(request: Request) -> bool:
+    admin_token = os.environ.get("ADMIN_TOKEN", "")
+    if not admin_token:
+        return False
+    cookie = request.cookies.get(_COOKIE_NAME, "")
+    return bool(cookie) and hmac.compare_digest(cookie, admin_token)
+
+
+def _login_redirect() -> RedirectResponse:
+    return RedirectResponse("/admin/login", status_code=303)
+
+
+def _today_jst() -> str:
+    return datetime.now(JST).strftime("%Y-%m-%d")
+
+
+def _to_jst_time(fetched_at: str) -> str:
+    if not fetched_at:
+        return ""
+    try:
+        dt = datetime.strptime(fetched_at[:19], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+        return dt.astimezone(JST).strftime("%m/%d %H:%M")
+    except Exception:
+        return fetched_at[:16]
+
+
+# --- 認証 ---
+
+
+@router.get("/login", response_class=HTMLResponse)
+async def login_form(request: Request, err: str = None):
+    if not os.environ.get("ADMIN_TOKEN", ""):
+        raise HTTPException(status_code=503, detail="ADMIN_TOKEN not configured")
+    if _is_authed(request):
+        return RedirectResponse("/admin", status_code=303)
+    return templates.TemplateResponse("login.html", {"request": request, "err": err})
+
+
+@router.post("/login")
+async def login_submit(request: Request, token: str = Form("")):
+    admin_token = os.environ.get("ADMIN_TOKEN", "")
+    if not admin_token:
+        raise HTTPException(status_code=503, detail="ADMIN_TOKEN not configured")
+    if not (token and hmac.compare_digest(token, admin_token)):
+        return RedirectResponse("/admin/login?err=トークンが違います", status_code=303)
+
+    resp = RedirectResponse("/admin", status_code=303)
+    resp.set_cookie(
+        _COOKIE_NAME,
+        token,
+        max_age=_COOKIE_MAX_AGE,
+        httponly=True,
+        samesite="strict",
+        secure=request.url.scheme == "https",
+    )
+    return resp
+
+
+@router.get("/logout")
+async def logout():
+    resp = RedirectResponse("/admin/login", status_code=303)
+    resp.delete_cookie(_COOKIE_NAME)
+    return resp
+
+
+# --- 画面 ---
+
+
+@router.get("", response_class=HTMLResponse)
+async def dashboard(request: Request, date: str = None, msg: str = None):
+    if not _is_authed(request):
+        return _login_redirect()
+    if not date:
+        date = _today_jst()
+
+    from store import analyses
+    stats = analyses.get_stats_by_date(date)
+
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "date": date,
+        "stats": stats,
+        "msg": msg,
+    })
+
+
+@router.get("/articles", response_class=HTMLResponse)
+async def articles_view(request: Request, date: str = None, sentiment: str = ""):
+    if not _is_authed(request):
+        return _login_redirect()
+    if not date:
+        date = _today_jst()
+
+    from store import analyses
+    raw = analyses.get_all_by_date(date, limit=_LIST_LIMIT)
+    truncated = len(raw) >= _LIST_LIMIT
+
+    if sentiment == "none":
+        rows = [r for r in raw if r["sentiment"] is None]
+    elif sentiment:
+        rows = [r for r in raw if r["sentiment"] == sentiment]
+    else:
+        rows = raw
+
+    for row in rows:
+        row["fetched_at_jst"] = _to_jst_time(row.get("fetched_at", "") or "")
+
+    return templates.TemplateResponse("articles.html", {
+        "request": request,
+        "date": date,
+        "sentiment": sentiment,
+        "articles": rows,
+        "truncated": truncated,
+        "limit": _LIST_LIMIT,
+    })
+
+
+@router.get("/settings", response_class=HTMLResponse)
+async def settings_view(request: Request, msg: str = None):
+    if not _is_authed(request):
+        return _login_redirect()
+
+    from store import settings as cfg
+    current = cfg.get_all()
+
+    return templates.TemplateResponse("settings.html", {
+        "request": request,
+        "settings": current,
+        "msg": msg,
+    })
+
+
+@router.post("/settings")
+async def settings_save(
+    request: Request,
+    gemini_system_prompt: str = Form(""),
+    sentiment_positive: str = Form(None),
+    sentiment_negative: str = Form(None),
+    signal_require_stocks: str = Form(None),
+    rss_feeds: str = Form(""),
+    batch_interval_seconds: str = Form("7"),
+    max_consecutive_failures: str = Form("3"),
+):
+    if not _is_authed(request):
+        return _login_redirect()
+
+    sentiments = []
+    if sentiment_positive:
+        sentiments.append("positive")
+    if sentiment_negative:
+        sentiments.append("negative")
+
+    from store import settings as cfg
+    cfg.save_all({
+        "gemini_system_prompt": gemini_system_prompt.strip(),
+        "signal_sentiments": ",".join(sentiments) if sentiments else "positive,negative",
+        "signal_require_stocks": "true" if signal_require_stocks else "false",
+        "rss_feeds": rss_feeds.strip(),
+        "batch_interval_seconds": batch_interval_seconds.strip() or "7",
+        "max_consecutive_failures": max_consecutive_failures.strip() or "3",
+    })
+
+    return RedirectResponse("/admin/settings?msg=設定を保存しました", status_code=303)
+
+
+@router.post("/notify")
+async def notify_now(request: Request, background: BackgroundTasks):
+    if not _is_authed(request):
+        return _login_redirect()
+
+    background.add_task(_run_full_pipeline)
+    logger.info("Immediate pipeline (collect→analyze→deliver) triggered from admin")
+
+    return RedirectResponse(
+        "/admin?msg=収集→分析→配信を開始しました（バックグラウンドで実行中）",
+        status_code=303,
+    )
+
+
+def _run_full_pipeline() -> None:
+    """本番の朝digestと同じ収集→分析→配信を直列実行する。"""
+    from collector.agent import run as collect
+    from monitor.agent import run as analyze
+    from monitor.digest import run as deliver
+
+    for step, fn in (("collect", collect), ("analyze", analyze), ("deliver", deliver)):
+        try:
+            fn()
+        except Exception:
+            logger.exception("Immediate pipeline step '%s' failed", step)
+            if step == "deliver":
+                raise  # 配信失敗は致命的なので再送出（収集・分析の失敗は配信を妨げない）

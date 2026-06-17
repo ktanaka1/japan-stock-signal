@@ -21,6 +21,7 @@ from fastapi.responses import JSONResponse
 
 from store.db import migrate
 from store import recipients
+from admin.routes import router as admin_router
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+app.include_router(admin_router)
 
 
 @app.get("/health")

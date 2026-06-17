@@ -7,12 +7,9 @@ from store.models import Article
 
 logger = logging.getLogger(__name__)
 
-RSS_FEEDS = [
-    # Yahoo!ニュース ビジネス
+_DEFAULT_RSS_FEEDS = [
     "https://news.yahoo.co.jp/rss/topics/business.xml",
-    # TDnet 適時開示（やのしんWEB-API経由）
     "https://webapi.yanoshin.jp/webapi/tdnet/list/recent.rss",
-    # NHK 経済
     "https://www.nhk.or.jp/rss/news/cat6.xml",
 ]
 
@@ -20,8 +17,14 @@ _TAG_RE = re.compile(r"<[^>]+>")
 
 
 def fetch_all() -> list[Article]:
+    from store import settings as cfg
+    feeds_str = cfg.get("rss_feeds")
+    feeds = [f.strip() for f in feeds_str.strip().splitlines() if f.strip()]
+    if not feeds:
+        feeds = _DEFAULT_RSS_FEEDS
+
     articles = []
-    for url in RSS_FEEDS:
+    for url in feeds:
         try:
             fetched = _fetch_feed(url)
             logger.info("Fetched %d entries from %s", len(fetched), url)

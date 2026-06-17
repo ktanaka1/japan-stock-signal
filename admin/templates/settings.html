@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}条件設定 - 株シグナル管理{% endblock %}
+{% block content %}
+
+<form method="post" action="/admin/settings">
+
+  <div class="card">
+    <h2>Gemini 分析プロンプト</h2>
+    <div class="form-group">
+      <label>分析指示文<br><small>sentiment / summary / reason / stocks の判定基準をここで定義します</small></label>
+      <textarea name="gemini_system_prompt" rows="10">{{ settings.gemini_system_prompt }}</textarea>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>シグナル判定条件</h2>
+    <div class="form-group">
+      <label>シグナルとする判定</label>
+      <div class="checkbox-group">
+        <label>
+          <input type="checkbox" name="sentiment_positive" value="1"
+            {% if 'positive' in settings.signal_sentiments %}checked{% endif %}>
+          ポジティブ（好材料）
+        </label>
+        <label>
+          <input type="checkbox" name="sentiment_negative" value="1"
+            {% if 'negative' in settings.signal_sentiments %}checked{% endif %}>
+          ネガティブ（悪材料）
+        </label>
+      </div>
+    </div>
+    <div class="form-group">
+      <div class="checkbox-group">
+        <label>
+          <input type="checkbox" name="signal_require_stocks" value="1"
+            {% if settings.signal_require_stocks == 'true' %}checked{% endif %}>
+          銘柄コードが特定できた記事のみシグナルにする
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>収集設定</h2>
+    <div class="form-group">
+      <label>RSSフィードURL<br><small>1行1URL。次回の収集から反映されます。</small></label>
+      <textarea name="rss_feeds" rows="6">{{ settings.rss_feeds }}</textarea>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>分析設定</h2>
+    <div style="display:flex; gap:40px; flex-wrap:wrap">
+      <div class="form-group">
+        <label>バッチ間隔（秒）<br><small>Gemini無料枠のレート制限対策。最小7秒推奨</small></label>
+        <input type="number" name="batch_interval_seconds" value="{{ settings.batch_interval_seconds }}"
+          min="1" max="60" style="width:80px; margin-top:6px">
+      </div>
+      <div class="form-group">
+        <label>連続失敗上限<br><small>この回数連続でバッチ失敗したら残記事をスキップ</small></label>
+        <input type="number" name="max_consecutive_failures" value="{{ settings.max_consecutive_failures }}"
+          min="1" max="10" style="width:80px; margin-top:6px">
+      </div>
+    </div>
+  </div>
+
+  <button class="btn btn-primary" type="submit">設定を保存</button>
+  &nbsp;<a href="/admin" style="color:#888; font-size:0.88rem">キャンセル</a>
+
+</form>
+
+{% endblock %}
