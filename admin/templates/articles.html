@@ -5,17 +5,19 @@
 <div class="card">
   <h2>記事一覧</h2>
   <div class="filters">
-    <form method="get" action="/admin/articles" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap">
+    <!-- 日付はその日のデータ取得が必要なのでサーバー往復 -->
+    <form method="get" action="/admin/articles" style="display:flex; gap:10px; align-items:center">
       <input type="date" name="date" value="{{ date }}" onchange="this.form.submit()">
-      <select name="sentiment" onchange="this.form.submit()">
-        <option value="">すべて</option>
-        <option value="positive" {% if sentiment == 'positive' %}selected{% endif %}>ポジティブ</option>
-        <option value="negative" {% if sentiment == 'negative' %}selected{% endif %}>ネガティブ</option>
-        <option value="neutral"  {% if sentiment == 'neutral'  %}selected{% endif %}>中立</option>
-        <option value="none"     {% if sentiment == 'none'     %}selected{% endif %}>未分析</option>
-      </select>
     </form>
-    <span class="text-muted">{{ articles | length }} 件</span>
+    <!-- 判定の絞り込みは読み込み済みデータをフロントで出し分け（サーバー往復なし） -->
+    <select id="sentiment-filter" onchange="filterRows()">
+      <option value="">すべて</option>
+      <option value="positive">ポジティブ</option>
+      <option value="negative">ネガティブ</option>
+      <option value="neutral">中立</option>
+      <option value="none">未分析</option>
+    </select>
+    <span class="text-muted"><span id="visible-count">{{ articles | length }}</span> 件</span>
   </div>
 
   {% if truncated %}
@@ -36,7 +38,7 @@
     </thead>
     <tbody>
       {% for a in articles %}
-      <tr>
+      <tr class="article-row" data-sentiment="{{ a.sentiment or 'none' }}">
         <td style="white-space:nowrap; color:#999; font-size:0.82rem">{{ a.fetched_at_jst }}</td>
         <td>
           <a href="{{ a.url }}" target="_blank" rel="noopener" class="trunc" title="{{ a.title }}">{{ a.title }}</a>
@@ -79,5 +81,19 @@
     </tbody>
   </table>
 </div>
+
+<script>
+  function filterRows() {
+    var sel = document.getElementById('sentiment-filter').value;
+    var rows = document.querySelectorAll('tr.article-row');
+    var visible = 0;
+    rows.forEach(function (row) {
+      var match = !sel || row.dataset.sentiment === sel;
+      row.style.display = match ? '' : 'none';
+      if (match) visible++;
+    });
+    document.getElementById('visible-count').textContent = visible;
+  }
+</script>
 
 {% endblock %}

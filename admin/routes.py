@@ -109,22 +109,17 @@ async def dashboard(request: Request, date: str = None, msg: str = None):
 
 
 @router.get("/articles", response_class=HTMLResponse)
-async def articles_view(request: Request, date: str = None, sentiment: str = ""):
+async def articles_view(request: Request, date: str = None):
     if not _is_authed(request):
         return _login_redirect()
     if not date:
         date = _today_jst()
 
+    # 判定での絞り込みは読み込み済みデータをフロント側で出し分けるため、
+    # サーバーは日付分の全件を返すだけにする
     from store import analyses
-    raw = analyses.get_all_by_date(date, limit=_LIST_LIMIT)
-    truncated = len(raw) >= _LIST_LIMIT
-
-    if sentiment == "none":
-        rows = [r for r in raw if r["sentiment"] is None]
-    elif sentiment:
-        rows = [r for r in raw if r["sentiment"] == sentiment]
-    else:
-        rows = raw
+    rows = analyses.get_all_by_date(date, limit=_LIST_LIMIT)
+    truncated = len(rows) >= _LIST_LIMIT
 
     for row in rows:
         row["fetched_at_jst"] = _to_jst_time(row.get("fetched_at", "") or "")
@@ -132,7 +127,6 @@ async def articles_view(request: Request, date: str = None, sentiment: str = "")
     return templates.TemplateResponse("articles.html", {
         "request": request,
         "date": date,
-        "sentiment": sentiment,
         "articles": rows,
         "truncated": truncated,
         "limit": _LIST_LIMIT,
