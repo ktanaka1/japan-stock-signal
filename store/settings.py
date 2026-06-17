@@ -24,6 +24,19 @@ _RSS_FEEDS_DEFAULT = "\n".join([
     "https://www.nhk.or.jp/rss/news/cat6.xml",
 ])
 
+# 本文取得の一次フィルタ語彙（タイトル部分一致・rss_feedsと同パターンで改行区切り）。
+# A: 数値系（業績・配当）= 本文取得対象。B: 非数値系（提携・分割等）= 取得しない。
+_BODY_FETCH_TRIGGERS_NUMERIC_DEFAULT = "\n".join([
+    "業績予想", "通期業績", "決算短信", "決算", "四半期",
+    "業績修正", "上方修正", "下方修正", "配当予想", "増配", "減配",
+    "剰余金の処分", "配当",
+])
+_BODY_FETCH_TRIGGERS_CATALYST_DEFAULT = "\n".join([
+    "株式分割", "株式併合", "新株予約権", "第三者割当", "自己株式",
+    "業務提携", "資本提携", "M&A", "合併", "TOB", "公開買付",
+    "子会社化", "株式交換", "主要株主の異動", "減損", "特別損失",
+])
+
 DEFAULTS: dict[str, str] = {
     "gemini_model": "gemini-2.5-flash",
     "gemini_system_prompt": _SYSTEM_PROMPT_DEFAULT,
@@ -32,6 +45,8 @@ DEFAULTS: dict[str, str] = {
     "rss_feeds": _RSS_FEEDS_DEFAULT,
     "batch_interval_seconds": "7",
     "max_consecutive_failures": "3",
+    "body_fetch_triggers_numeric": _BODY_FETCH_TRIGGERS_NUMERIC_DEFAULT,
+    "body_fetch_triggers_catalyst": _BODY_FETCH_TRIGGERS_CATALYST_DEFAULT,
 }
 
 

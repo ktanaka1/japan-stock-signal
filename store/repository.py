@@ -22,6 +22,37 @@ def save(article: Article) -> tuple[Article, bool]:
     return article, is_new
 
 
+def save_with_body(article: Article) -> tuple[Article, bool]:
+    """本文付き記事を保存する。(article, is_new) を返す。URL重複時は is_new=False。
+
+    系統A該当・本文取得を試みた記事用。新規 INSERT 時のみ本文カラムも書き込む。
+    既存URLは挿入をスキップし、本文取得を無駄に走らせない判断材料（is_new）を返す。
+    """
+    result = execute(
+        """
+        INSERT OR IGNORE INTO articles
+            (title, body, url, security_code, full_body, body_status)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            article.title, article.body, article.url,
+            article.security_code, article.full_body, article.body_status,
+        ),
+    )
+    is_new = result.changes > 0
+    if is_new:
+        article.id = result.last_row_id
+    else:
+        row = execute(
+            "SELECT id, fetched_at, is_read FROM articles WHERE url = ?",
+            (article.url,),
+        ).rows[0]
+        article.id = row["id"]
+        article.fetched_at = row["fetched_at"]
+        article.is_read = bool(row["is_read"])
+    return article, is_new
+
+
 def save_many(articles: list[Article]) -> int:
     """記事をまとめて保存し、新規保存できた件数を返す。既存URLはスキップ。"""
     # D1のREST APIは1クエリ=1リクエストなので、複数行VALUESでラウンドトリップを減らす
@@ -39,6 +70,23 @@ def save_many(articles: list[Article]) -> int:
         )
         new_count += result.changes
     return new_count
+
+
+def existing_urls(urls: list[str]) -> set[str]:
+    """与えたURLのうち既にDBに在るものを返す（本文取得の重複実行を避ける事前チェック）。"""
+    found: set[str] = set()
+    if not urls:
+        return found
+    chunk_size = 50
+    for i in range(0, len(urls), chunk_size):
+        chunk = urls[i : i + chunk_size]
+        placeholders = ", ".join(["?"] * len(chunk))
+        rows = execute(
+            f"SELECT url FROM articles WHERE url IN ({placeholders})",
+            tuple(chunk),
+        ).rows
+        found.update(r["url"] for r in rows)
+    return found
 
 
 def get_unread() -> list[Article]:
