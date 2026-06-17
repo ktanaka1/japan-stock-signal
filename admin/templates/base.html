@@ -50,7 +50,16 @@
     .flash-err { background: #f8d7da; color: #721c24; }
     .trunc { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
     a { color: #007bff; }
-    .filters { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+    .filters { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+    .filters form { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    /* フィルタ内コントロールの高さを統一し縦中央を揃える */
+    .filters form > select,
+    .filters form > input,
+    .filters .date-field > input[type=date] { height: 36px; box-sizing: border-box; }
+    .filters form > button { height: 36px; box-sizing: border-box; display: inline-flex; align-items: center; }
+    /* 結果情報バー（件数・表示件数をグループ化） */
+    .result-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+    .result-bar .count { margin-left: auto; }
     /* 日付入力欄の中にクリア（×）ボタンを重ねる */
     .date-field { position: relative; display: inline-flex; align-items: center; }
     .date-field input.has-value { padding-right: 46px; }
