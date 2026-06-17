@@ -335,18 +335,32 @@ def _direction(prev: Optional[float], curr: Optional[float]) -> Optional[str]:
 
 
 def _build_forecast_revision(facts: list[_Fact]) -> Optional[dict]:
-    """業績予想の修正: 前回予想 vs 今回予想 を厳密照合して items を組む。"""
+    """業績予想の修正: 前回予想 vs 今回予想 を厳密照合して items を組む。
+
+    ★当期(current fiscal year)へのピン留め（ユーザー指摘の致命的弱点対策）:
+      業績予想の修正XBRLには、稀に「当期の修正」と「来期(NextYear)の見通し」が同居する。
+      実ファイル(tse-rvfc)で前回/今回予想の contextRef は必ず
+        CurrentYearDuration_..._PreviousMember_ForecastMember /
+        CurrentYearDuration_..._CurrentMember_ForecastMember
+      の形を取り、来期は NextYearDuration_...（更に翌々期は Next2YearDuration_...）になる
+      ことを実XBRLで裏取りした。よって当期予想だけを確定的に拾うため、required に
+      "CurrentYearDuration" を加え（当期会計期間にピン留め）、さらに二重防御として
+      将来期間 "NextYearDuration"/"Next2YearDuration" を forbidden に追加する。
+      これにより「来期の超強気予想が当期修正よりファイル内で先に定義されていても」
+      出現順に依存せず当期の値のみを採用し、巨大な誤シグナルの発火を防ぐ。
+    """
     items = []
+    _future = ("NextYearDuration", "Next2YearDuration")
     for key, label, kind, suffixes in _METRICS:
         prev_f = _select_fact(
             facts, suffixes,
-            required=("PreviousMember", "ForecastMember"),
-            forbidden=("LowerMember", "UpperMember", "QuarterMember", "SecondQuarter", "FirstQuarter", "ThirdQuarter"),
+            required=("CurrentYearDuration", "PreviousMember", "ForecastMember"),
+            forbidden=("LowerMember", "UpperMember", "QuarterMember", "SecondQuarter", "FirstQuarter", "ThirdQuarter") + _future,
         )
         curr_f = _select_fact(
             facts, suffixes,
-            required=("CurrentMember", "ForecastMember"),
-            forbidden=("LowerMember", "UpperMember", "ResultMember", "QuarterMember", "SecondQuarter", "FirstQuarter", "ThirdQuarter"),
+            required=("CurrentYearDuration", "CurrentMember", "ForecastMember"),
+            forbidden=("LowerMember", "UpperMember", "ResultMember", "QuarterMember", "SecondQuarter", "FirstQuarter", "ThirdQuarter") + _future,
         )
         prior_f = _select_fact(
             facts, suffixes,
@@ -387,20 +401,24 @@ def _build_earnings(facts: list[_Fact]) -> Optional[dict]:
 
 def _build_dividend_revision(facts: list[_Fact]) -> Optional[dict]:
     """配当予想の修正: 年間配当の 前回予想 vs 今回予想（＋前期実績）。"""
+    # 配当も将来期間（来期 NextYear / 翌々期 Next2Year の年間配当見通し）の混入を最小限の
+    # forbidden で排除する（AnnualMember 軸＋当期 CurrentYearDuration への暗黙のピン留めに加え、
+    # 念のため将来期間を明示除外）。前回/今回は CurrentYearDuration_AnnualMember_... に限定。
+    _future = ("NextYearDuration", "Next2YearDuration")
     prev_f = _select_fact(
         facts, _DIVIDEND_SUFFIXES,
-        required=("AnnualMember", "PreviousMember", "ForecastMember"),
-        forbidden=("LowerMember", "UpperMember"),
+        required=("CurrentYearDuration", "AnnualMember", "PreviousMember", "ForecastMember"),
+        forbidden=("LowerMember", "UpperMember") + _future,
     )
     curr_f = _select_fact(
         facts, _DIVIDEND_SUFFIXES,
-        required=("AnnualMember", "CurrentMember", "ForecastMember"),
-        forbidden=("LowerMember", "UpperMember", "ResultMember"),
+        required=("CurrentYearDuration", "AnnualMember", "CurrentMember", "ForecastMember"),
+        forbidden=("LowerMember", "UpperMember", "ResultMember") + _future,
     )
     prior_f = _select_fact(
         facts, _DIVIDEND_SUFFIXES,
         required=("PriorYearDuration", "AnnualMember", "ResultMember"),
-        forbidden=("LowerMember", "UpperMember"),
+        forbidden=("LowerMember", "UpperMember") + _future,
     )
     item = _make_item("DividendPerShare", "1株当たり配当", "per_share", prev_f, curr_f, prior_f)
     if not item:
