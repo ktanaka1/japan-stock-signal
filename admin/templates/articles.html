@@ -46,7 +46,8 @@
         <option value="none"     {% if sentiment == 'none'     %}selected{% endif %}>未分析</option>
       </select>
       <input type="text" name="code" value="{{ code }}" placeholder="銘柄コード" inputmode="numeric"
-        onchange="this.form.submit()" style="width:110px" title="銘柄コードで絞り込み（前方一致）">
+        onkeydown="if(event.key==='Enter'){event.preventDefault(); this.form.submit();}"
+        onchange="this.form.submit()" style="width:110px" title="銘柄コードで絞り込み（コード入力後Enter、前方一致）">
       <select name="per_page" onchange="this.form.submit()" title="1ページの表示件数">
         {% for n in per_page_options %}
         <option value="{{ n }}" {% if per_page == n %}selected{% endif %}>{{ n }}件</option>
