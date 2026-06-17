@@ -32,12 +32,14 @@ def save(
 def get_articles(
     date_str: str | None = None,
     sentiment: str | None = None,
+    code: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[dict], bool]:
     """記事を分析結果・シグナル情報付きで新しい順に返す。未分析記事も含む。
 
-    date_str / sentiment は任意のフィルタ。sentiment="none" は未分析記事のみ。
+    date_str / sentiment / code は任意のフィルタ。sentiment="none" は未分析記事のみ。
+    code は銘柄コードの前方一致（stocks JSON内のいずれかのcodeにマッチ）。
     次ページの有無を判定するため limit+1 件取得し、(rows[:limit], has_next) を返す。
     """
     where = []
@@ -50,6 +52,13 @@ def get_articles(
     elif sentiment:
         where.append("aa.sentiment = ?")
         params.append(sentiment)
+    if code:
+        where.append(
+            "aa.stocks IS NOT NULL AND EXISTS ("
+            "SELECT 1 FROM json_each(aa.stocks) je "
+            "WHERE json_extract(je.value, '$.code') LIKE ?)"
+        )
+        params.append(code + "%")
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
 
     sql = f"""

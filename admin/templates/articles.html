@@ -4,6 +4,7 @@
 
 {% set qs = '&date=' ~ date if date else '' %}
 {% set qs = qs ~ ('&sentiment=' ~ sentiment if sentiment else '') %}
+{% set qs = qs ~ ('&code=' ~ code if code else '') %}
 {% set qs = qs ~ '&per_page=' ~ per_page %}
 {% macro pager() %}
 <div style="display:flex; justify-content:space-between; align-items:center">
@@ -30,7 +31,7 @@
         日付
         <input type="date" name="date" value="{{ date }}" onchange="this.form.submit()">
       </label>
-      {% if date %}<a href="/admin/articles?per_page={{ per_page }}{% if sentiment %}&sentiment={{ sentiment }}{% endif %}" style="font-size:0.82rem">日付クリア</a>{% endif %}
+      {% if date %}<a href="/admin/articles?per_page={{ per_page }}{% if sentiment %}&sentiment={{ sentiment }}{% endif %}{% if code %}&code={{ code }}{% endif %}" style="font-size:0.82rem">日付クリア</a>{% endif %}
       <select name="sentiment" onchange="this.form.submit()">
         <option value="">すべての判定</option>
         <option value="positive" {% if sentiment == 'positive' %}selected{% endif %}>ポジティブ</option>
@@ -38,6 +39,8 @@
         <option value="neutral"  {% if sentiment == 'neutral'  %}selected{% endif %}>中立</option>
         <option value="none"     {% if sentiment == 'none'     %}selected{% endif %}>未分析</option>
       </select>
+      <input type="text" name="code" value="{{ code }}" placeholder="銘柄コード" inputmode="numeric"
+        onchange="this.form.submit()" style="width:110px" title="銘柄コードで絞り込み（前方一致）">
       <select name="per_page" onchange="this.form.submit()" title="1ページの表示件数">
         {% for n in per_page_options %}
         <option value="{{ n }}" {% if per_page == n %}selected{% endif %}>{{ n }}件</option>

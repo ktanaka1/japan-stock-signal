@@ -114,6 +114,7 @@ async def articles_view(
     request: Request,
     date: str = "",
     sentiment: str = "",
+    code: str = "",
     page: int = 1,
     per_page: int = _PER_PAGE,
 ):
@@ -125,10 +126,12 @@ async def articles_view(
         per_page = _PER_PAGE
     offset = (page - 1) * per_page
 
+    code = code.strip()
     from store import analyses
     rows, has_next = analyses.get_articles(
         date_str=date or None,
         sentiment=sentiment or None,
+        code=code or None,
         limit=per_page,
         offset=offset,
     )
@@ -140,6 +143,7 @@ async def articles_view(
         "request": request,
         "date": date,
         "sentiment": sentiment,
+        "code": code,
         "page": page,
         "has_next": has_next,
         "per_page": per_page,
