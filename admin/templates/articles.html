@@ -29,11 +29,17 @@
     <form method="get" action="/admin/articles" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap">
       <label style="display:flex; align-items:center; gap:6px; font-weight:normal">
         日付
-        <input type="date" name="date" value="{{ date }}" onchange="this.form.submit()">
+        <span class="date-field">
+          <input type="date" name="date" value="{{ date }}" onchange="this.form.submit()"
+            class="{% if date %}has-value{% endif %}">
+          {% if date %}
+          <button type="button" class="date-clear" title="日付をクリア"
+            onclick="this.form.elements['date'].value=''; this.form.submit();">×</button>
+          {% endif %}
+        </span>
       </label>
-      {% if date %}<a href="/admin/articles?per_page={{ per_page }}{% if sentiment %}&sentiment={{ sentiment }}{% endif %}{% if code %}&code={{ code }}{% endif %}" style="font-size:0.82rem">日付クリア</a>{% endif %}
       <select name="sentiment" onchange="this.form.submit()">
-        <option value="">すべての判定</option>
+        <option value="">すべて</option>
         <option value="positive" {% if sentiment == 'positive' %}selected{% endif %}>ポジティブ</option>
         <option value="negative" {% if sentiment == 'negative' %}selected{% endif %}>ネガティブ</option>
         <option value="neutral"  {% if sentiment == 'neutral'  %}selected{% endif %}>中立</option>
