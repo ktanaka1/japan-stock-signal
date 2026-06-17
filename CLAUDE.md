@@ -15,11 +15,13 @@
 
 ### 実行・テスト
 - **ローカル実行は `.env` 経由でデフォルト本番D1に繋がる**（`store/db.py` が `load_dotenv()`）。
-  ローカルSQLiteでテストするときは必ず次を明示する:
+  テスト/ローカル実行では必ず **`FORCE_LOCAL_DB=1`** を立てる（鉄壁ガード。`.env` に
+  `CLOUDFLARE_*` があっても D1 を完全バイパスしローカルSQLiteへ強制する）:
   ```
-  CLOUDFLARE_ACCOUNT_ID= CLOUDFLARE_D1_DATABASE_ID= CLOUDFLARE_API_TOKEN= DB_PATH=/tmp/test.db .venv/bin/python ...
+  FORCE_LOCAL_DB=1 DB_PATH=/tmp/test.db .venv/bin/python ...
   ```
-  （過去にテストデータが本番D1へ混入した事故あり）
+  （`CLOUDFLARE_*=` を空にする方法は import 時の `load_dotenv` 再注入で破られるため不可。
+  過去にテストデータが本番D1へ混入した事故が複数回あり、`FORCE_LOCAL_DB` はその恒久対策）
 - `DRY_RUN=true` でGemini呼び出しをモック化できる
 - 動作確認は FastAPI の `TestClient`（lifespanでmigrateを発火させるため `with TestClient(app) as c:` を使う）
 

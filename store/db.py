@@ -107,6 +107,12 @@ def _split_statements(script: str) -> list[str]:
 
 
 def _use_d1() -> bool:
+    # 鉄壁のセーフティ: FORCE_LOCAL_DB が立っていれば、.env に CLOUDFLARE_* が
+    # 何が書かれていようと D1 初期化を完全バイパスし、強制的にローカルSQLiteへルーティングする。
+    # load_dotenv() が import 時に本番認証を再注入する罠で、テスト/開発が誤って本番D1へ
+    # 書き込む事故（過去に複数回発生）を物理的に防ぐためのガード。テスト実行時は必ずこれを立てる。
+    if os.environ.get("FORCE_LOCAL_DB", "").strip().lower() in ("1", "true", "yes"):
+        return False
     return bool(
         os.environ.get("CLOUDFLARE_ACCOUNT_ID")
         and os.environ.get("CLOUDFLARE_D1_DATABASE_ID")
