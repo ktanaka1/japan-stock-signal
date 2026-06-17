@@ -24,6 +24,8 @@ import httpx
 import pypdf
 from lxml import etree
 
+from collector import xbrl_parser
+
 logger = logging.getLogger(__name__)
 
 # 1リクエストの上限 ~20s（connect 5s / read 15s）
@@ -46,6 +48,9 @@ class BodyResult:
     body_status: str  # 'xbrl' | 'pdf_text' | 'error'
     full_body: Optional[str] = None
     security_code: Optional[str] = None
+    # XBRL経路の構造化抽出結果（Step③）。PDF経路では常に None。
+    xbrl_metrics: Optional[str] = None       # 正規化数値＋機械方向ラベルのJSON文字列（抽出0件なら None）
+    correction_reason: Optional[str] = None  # 定性タグ由来の修正理由テキスト（無ければ None）
 
 
 def fetch_body(
@@ -107,7 +112,26 @@ def _fetch_xbrl(url_xbrl: str, code: Optional[str]) -> BodyResult:
         logger.info("body fetch: ixbrl text empty; degrade")
         return BodyResult(body_status="error", security_code=code)
 
-    return BodyResult(body_status="xbrl", full_body=text, security_code=code)
+    # Step③: zip 全体から構造化数値（前回↔今回 比較）と修正理由を抽出して付帯する。
+    # 抽出0件でも body_status は 'xbrl' のまま（full_body テキストは Step④で LLM に渡せる）。
+    metrics_json: Optional[str] = None
+    correction_reason: Optional[str] = None
+    try:
+        metrics_json, correction_reason = xbrl_parser.parse(content)
+        # company_code 未取得時は開示由来の SecuritiesCode で補完（新形式英数字に対応）。
+        if not code:
+            code = xbrl_parser.extract_security_code(content) or code
+    except Exception:
+        # 構造化抽出の失敗で本文保存まで落とさない（テキストは取れている）。
+        logger.info("body fetch: xbrl structured extract failed; keep text only", exc_info=True)
+
+    return BodyResult(
+        body_status="xbrl",
+        full_body=text,
+        security_code=code,
+        xbrl_metrics=metrics_json,
+        correction_reason=correction_reason,
+    )
 
 
 def _pick_ixbrl_entry(names: list[str]) -> Optional[str]:

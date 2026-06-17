@@ -61,6 +61,8 @@ def _process_body_targets(targets: list) -> int:
         article.body_status = result.body_status
         article.full_body = result.full_body
         article.security_code = result.security_code
+        article.xbrl_metrics = result.xbrl_metrics
+        article.correction_reason = result.correction_reason
         try:
             _, is_new = repository.save_with_body(article)
             if is_new:

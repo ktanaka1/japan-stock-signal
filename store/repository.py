@@ -31,12 +31,14 @@ def save_with_body(article: Article) -> tuple[Article, bool]:
     result = execute(
         """
         INSERT OR IGNORE INTO articles
-            (title, body, url, security_code, full_body, body_status)
-        VALUES (?, ?, ?, ?, ?, ?)
+            (title, body, url, security_code, xbrl_metrics, full_body,
+             correction_reason, body_status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             article.title, article.body, article.url,
-            article.security_code, article.full_body, article.body_status,
+            article.security_code, article.xbrl_metrics, article.full_body,
+            article.correction_reason, article.body_status,
         ),
     )
     is_new = result.changes > 0
