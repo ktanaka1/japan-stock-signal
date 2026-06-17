@@ -50,16 +50,29 @@
     .flash-err { background: #f8d7da; color: #721c24; }
     .trunc { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
     a { color: #007bff; }
-    .filters { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
-    .filters form { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-    /* フィルタ内コントロールの高さを統一し縦中央を揃える */
-    .filters form > select,
-    .filters form > input,
-    .filters .date-field > input[type=date] { height: 36px; box-sizing: border-box; }
-    .filters form > button { height: 36px; box-sizing: border-box; display: inline-flex; align-items: center; }
-    /* 結果情報バー（件数・表示件数をグループ化） */
-    .result-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
-    .result-bar .count { margin-left: auto; }
+    /* === フィルタ行：高さ40pxで統一・縦中央・gap16・件目は右端 === */
+    .filters { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin-bottom: 24px; }
+    .filters > form { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+    .filters > form > select,
+    .filters > form > input,
+    .filters .date-field > input[type=date],
+    .filters > form > .date-toggle { height: 40px; box-sizing: border-box; }
+    .filters > .count { margin-left: auto; white-space: nowrap; }
+    /* 日付未指定トグル：リンク見えを避けてコントロール風に */
+    .date-toggle { display: inline-flex; align-items: center; gap: 4px; padding: 0 12px; border: 1px solid #ced4da; border-radius: 4px; background: #fff; color: #555; font-size: 0.88rem; font-family: inherit; cursor: pointer; }
+    .date-toggle:hover { background: #f1f3f5; }
+    /* === 表示件数行：ラベルとセレクトを縦中央・高さ統一 === */
+    .result-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 24px; }
+    .perpage { display: inline-flex; align-items: center; gap: 8px; }
+    .perpage select { height: 40px; box-sizing: border-box; }
+    /* === ページネーション：縦中央・gap統一・現在ページを強調 === */
+    .pager { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 24px; }
+    .pager a, .pager .current { display: inline-flex; align-items: center; justify-content: center; min-width: 36px; height: 36px; padding: 0 10px; border-radius: 5px; text-decoration: none; box-sizing: border-box; }
+    .pager a { color: #007bff; border: 1px solid #dee2e6; background: #fff; }
+    .pager a:hover { background: #f1f3f5; }
+    .pager .current { background: #007bff; color: #fff; border: 1px solid #007bff; font-weight: 600; }
+    .pager .nav { padding: 0 14px; }
+    .pager .ellipsis { color: #999; padding: 0 2px; }
     /* 日付入力欄の中にクリア（×）ボタンを重ねる */
     .date-field { position: relative; display: inline-flex; align-items: center; }
     .date-field input.has-value { padding-right: 46px; }
