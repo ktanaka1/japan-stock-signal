@@ -25,6 +25,7 @@ _RSS_FEEDS_DEFAULT = "\n".join([
 ])
 
 DEFAULTS: dict[str, str] = {
+    "gemini_model": "gemini-2.5-flash",
     "gemini_system_prompt": _SYSTEM_PROMPT_DEFAULT,
     "signal_sentiments": "positive,negative",
     "signal_require_stocks": "true",

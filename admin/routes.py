@@ -185,6 +185,7 @@ async def settings_view(request: Request, msg: str = None):
 @router.post("/settings")
 async def settings_save(
     request: Request,
+    gemini_model: str = Form(""),
     gemini_system_prompt: str = Form(""),
     sentiment_positive: str = Form(None),
     sentiment_negative: str = Form(None),
@@ -204,6 +205,7 @@ async def settings_save(
 
     from store import settings as cfg
     cfg.save_all({
+        "gemini_model": gemini_model.strip() or "gemini-2.5-flash",
         "gemini_system_prompt": gemini_system_prompt.strip(),
         "signal_sentiments": ",".join(sentiments) if sentiments else "positive,negative",
         "signal_require_stocks": "true" if signal_require_stocks else "false",

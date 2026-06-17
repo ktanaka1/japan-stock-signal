@@ -5,7 +5,11 @@
 <form method="post" action="/admin/settings">
 
   <div class="card">
-    <h2>Gemini 分析プロンプト</h2>
+    <h2>Gemini モデル・分析プロンプト</h2>
+    <div class="form-group">
+      <label>モデル<br><small>例: gemini-2.5-flash（無料枠が広い）/ gemini-3.5-flash・gemini-3.1-pro（API課金が必要）。上位へ上げる場合はAPIキーの課金有効化が前提</small></label>
+      <input type="text" name="gemini_model" value="{{ settings.gemini_model }}" style="width:280px">
+    </div>
     <div class="form-group">
       <label>分析指示文<br><small>sentiment / summary / reason / stocks の判定基準をここで定義します</small></label>
       <textarea name="gemini_system_prompt" rows="10">{{ settings.gemini_system_prompt }}</textarea>

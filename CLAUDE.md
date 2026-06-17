@@ -8,7 +8,7 @@
 - collector / monitor / digest: GitHub Actions schedule（cronはUTC指定、JST-9h）
 - webhook / 管理画面: FastAPI + Uvicorn（Render Free）、管理画面は Jinja2
 - DB: Cloudflare D1（SQLite互換・REST API）／ローカルは SQLite。ORMなし・SQL直書き
-- LLM: Google Gemini（gemini-3.5-flash）
+- LLM: Google Gemini（既定 gemini-2.5-flash、管理画面のsettingsで変更可。上位モデルはAPI課金が前提）
 - 通知: LINE Messaging API + SMTP（分析レポートメール）
 
 ## 重要なルール

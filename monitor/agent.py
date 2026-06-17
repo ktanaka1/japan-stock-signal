@@ -39,6 +39,7 @@ def run() -> None:
         system_prompt=settings["gemini_system_prompt"],
         batch_interval=int(settings["batch_interval_seconds"]),
         max_failures=int(settings["max_consecutive_failures"]),
+        model=settings["gemini_model"],
     )
 
     signal_sentiments = set(settings["signal_sentiments"].split(","))

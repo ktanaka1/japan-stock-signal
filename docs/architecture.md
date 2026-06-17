@@ -12,7 +12,7 @@
 | 管理画面 | FastAPI + Jinja2（サーバーサイドレンダリング、/admin） |
 | DB | Cloudflare D1（SQLite互換、REST API）／ローカルはSQLite |
 | データアクセス | 自前の薄いstore層（ORMなし、SQL直書き・`?`プレースホルダ） |
-| LLM | Google Gemini API（gemini-3.5-flash、無料枠1,500req/日） |
+| LLM | Google Gemini API（既定 gemini-2.5-flash、管理画面で変更可。上位は要API課金） |
 | 通知 | LINE Messaging API（Multicast）+ SMTP（分析レポートメール） |
 | HTTP | httpx |
 

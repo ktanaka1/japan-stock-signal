@@ -29,8 +29,9 @@ _BATCH_SYSTEM_PROMPT = (
     "記事ごとに1つの結果を返し、index フィールドに記事番号をそのまま入れてください。"
 )
 
-# 使用するGeminiモデル（分類・抽出タスク向けにFlash系を採用 / ADR参照）
-_MODEL = "gemini-3.5-flash"
+# 使用するGeminiモデルの既定値（実際の値はsettingsで上書き可能 / 管理画面から変更）
+# 無料枠が広く実績のある 2.5-flash を既定にする。上位へは管理画面で切替可能。
+_MODEL = "gemini-2.5-flash"
 
 # Geminiのレート制限対策にバッチ間で待機する（実際の値はsettingsで上書き可能）
 _BATCH_INTERVAL_SECONDS = 7
@@ -61,6 +62,7 @@ def analyze_batch(
     system_prompt: str | None = None,
     batch_interval: int | None = None,
     max_failures: int | None = None,
+    model: str | None = None,
 ) -> List[Tuple[object, Optional[AnalysisResult]]]:
     """記事リストをbatch_size件ずつまとめて分析し、(article, result) のリストを返す。
 
@@ -69,6 +71,7 @@ def analyze_batch(
     """
     interval = batch_interval if batch_interval is not None else _BATCH_INTERVAL_SECONDS
     failures_limit = max_failures if max_failures is not None else _MAX_CONSECUTIVE_FAILURES
+    used_model = model if model else _MODEL
     prompt = system_prompt if system_prompt else _SYSTEM_PROMPT
     effective_batch_prompt = (
         prompt
@@ -87,7 +90,7 @@ def analyze_batch(
         if i > 0:
             time.sleep(interval)
         try:
-            results.extend(_llm_analyze_batch(chunk, system_prompt=effective_batch_prompt))
+            results.extend(_llm_analyze_batch(chunk, system_prompt=effective_batch_prompt, model=used_model))
             consecutive_failures = 0
         except Exception:
             logger.exception("Batch analysis failed for articles %s", [a.id for a in chunk])
@@ -157,7 +160,7 @@ def _llm_analyze(title: str, body: str, _retry: int = 3) -> AnalysisResult:
 
 
 def _llm_analyze_batch(
-    articles: list, system_prompt: str = _BATCH_SYSTEM_PROMPT, _retry: int = 3
+    articles: list, system_prompt: str = _BATCH_SYSTEM_PROMPT, model: str = _MODEL, _retry: int = 3
 ) -> List[Tuple[object, Optional[AnalysisResult]]]:
     from pydantic import BaseModel
     from google import genai
@@ -186,7 +189,7 @@ def _llm_analyze_batch(
     for attempt in range(_retry):
         try:
             response = client.models.generate_content(
-                model=_MODEL,
+                model=model,
                 contents=contents,
                 config=types.GenerateContentConfig(
                     system_instruction=system_prompt,
