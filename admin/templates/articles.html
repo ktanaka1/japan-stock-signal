@@ -2,49 +2,60 @@
 {% block title %}記事一覧 - 株シグナル管理{% endblock %}
 {% block content %}
 
-{% set qs = '&date=' ~ date if date else '' %}
-{% set qs = qs ~ '&year=' ~ year %}
-{% set qs = qs ~ ('&sentiment=' ~ sentiment if sentiment else '') %}
-{% set qs = qs ~ ('&code=' ~ code if code else '') %}
-{% set qs = qs ~ '&per_page=' ~ per_page %}
+{% set qs_nopp = '&date=' ~ date if date else '' %}
+{% set qs_nopp = qs_nopp ~ '&year=' ~ year %}
+{% set qs_nopp = qs_nopp ~ ('&sentiment=' ~ sentiment if sentiment else '') %}
+{% set qs_nopp = qs_nopp ~ ('&code=' ~ code if code else '') %}
+{% set qs = qs_nopp ~ '&per_page=' ~ per_page %}
 {% macro pager() %}
-<div style="display:flex; justify-content:space-between; align-items:center">
-  {% if page > 1 %}
-    <a class="btn btn-primary" href="/admin/articles?page={{ page - 1 }}{{ qs }}">← 前へ</a>
-  {% else %}
-    <span></span>
+{% set start = page - 2 if page - 2 > 1 else 1 %}
+<div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap">
+  {% if page > 1 %}<a class="btn btn-primary" href="/admin/articles?page={{ page - 1 }}{{ qs }}">← 前へ</a>{% endif %}
+  {% if start > 1 %}
+    <a href="/admin/articles?page=1{{ qs }}" style="padding:0 4px">1</a>
+    {% if start > 2 %}<span class="text-muted">…</span>{% endif %}
   {% endif %}
-  <span class="text-muted">{{ page }}ページ</span>
-  {% if has_next %}
-    <a class="btn btn-primary" href="/admin/articles?page={{ page + 1 }}{{ qs }}">次へ →</a>
-  {% else %}
-    <span></span>
-  {% endif %}
+  {% for p in range(start, page + 1) %}
+    {% if p == page %}<strong style="padding:0 6px">{{ p }}</strong>{% else %}<a href="/admin/articles?page={{ p }}{{ qs }}" style="padding:0 4px">{{ p }}</a>{% endif %}
+  {% endfor %}
+  {% if has_next %}<a href="/admin/articles?page={{ page + 1 }}{{ qs }}" style="padding:0 4px">{{ page + 1 }}</a>{% endif %}
+  {% if has_next %}<a class="btn btn-primary" href="/admin/articles?page={{ page + 1 }}{{ qs }}">次へ →</a>{% endif %}
 </div>
+{% endmacro %}
+{% macro perpage_select() %}
+<span class="text-muted">表示件数：
+  <select onchange="location.href='/admin/articles?page=1{{ qs_nopp }}&per_page=' + this.value">
+    {% for n in per_page_options %}
+    <option value="{{ n }}" {% if per_page == n %}selected{% endif %}>{{ n }}件</option>
+    {% endfor %}
+  </select>
+</span>
 {% endmacro %}
 
 <div class="card">
   <h2>記事一覧</h2>
   <div class="filters">
-    <!-- 日付・判定を変えると page=1 から再取得（hidden の page は付けない） -->
+    <!-- 年・判定・日付・コードを変えると page=1 から再取得（per_page は hidden で保持） -->
     <form method="get" action="/admin/articles" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap">
-      <label style="display:flex; align-items:center; gap:6px; font-weight:normal">
-        日付
-        <span class="date-field">
-          <input type="date" name="date" value="{{ date }}" onchange="this.form.submit()"
-            class="{% if date %}has-value{% endif %}">
-          {% if date %}
-          <button type="button" class="date-clear" title="日付をクリア"
-            onclick="this.form.elements['date'].value=''; this.form.submit();">×</button>
-          {% endif %}
-        </span>
-      </label>
+      <input type="hidden" name="per_page" value="{{ per_page }}">
       <select name="year" onchange="this.form.submit()" title="対象年（日付指定時は無効）">
         <option value="all" {% if year == 'all' %}selected{% endif %}>すべての年</option>
         {% for y in available_years %}
         <option value="{{ y }}" {% if year == y %}selected{% endif %}>{{ y }}年</option>
         {% endfor %}
       </select>
+      {% if date %}
+      <span class="date-field">
+        <input type="date" name="date" value="{{ date }}" onchange="this.form.submit()" class="has-value">
+        <button type="button" class="date-clear" title="日付をクリア"
+          onclick="this.form.elements['date'].value=''; this.form.submit();">×</button>
+      </span>
+      {% else %}
+      <input type="date" name="date" value="" id="date-input" onchange="this.form.submit()" style="display:none">
+      <button type="button" title="特定の日付で絞り込む"
+        onclick="var i=document.getElementById('date-input'); i.style.display=''; i.focus(); this.style.display='none';"
+        style="background:none; border:none; color:#007bff; cursor:pointer; font-size:0.88rem; padding:0">📅 日付で絞り込む</button>
+      {% endif %}
       <select name="sentiment" onchange="this.form.submit()">
         <option value="">すべて</option>
         <option value="positive" {% if sentiment == 'positive' %}selected{% endif %}>ポジティブ</option>
@@ -55,16 +66,14 @@
       <input type="text" name="code" value="{{ code }}" placeholder="銘柄コード" inputmode="numeric"
         onkeydown="if(event.key==='Enter'){event.preventDefault(); this.form.submit();}"
         onchange="this.form.submit()" style="width:110px" title="銘柄コードで絞り込み（コード入力後Enter、前方一致）">
-      <select name="per_page" onchange="this.form.submit()" title="1ページの表示件数">
-        {% for n in per_page_options %}
-        <option value="{{ n }}" {% if per_page == n %}selected{% endif %}>{{ n }}件</option>
-        {% endfor %}
-      </select>
     </form>
     <span class="text-muted">
       {% if articles %}{{ offset + 1 }}〜{{ offset + articles | length }} 件目{% else %}該当なし{% endif %}
     </span>
   </div>
+
+  <!-- 表示件数は別行 -->
+  <div style="margin-bottom:12px">{{ perpage_select() }}</div>
 
   {{ pager() }}
 
@@ -127,7 +136,10 @@
   </table>
   </div>
 
-  <div style="margin-top:18px">{{ pager() }}</div>
+  <div style="margin-top:18px; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap">
+    {{ perpage_select() }}
+    {{ pager() }}
+  </div>
 </div>
 
 {% endblock %}
