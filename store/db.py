@@ -7,6 +7,7 @@ D1はSQLite互換なので、SQLは共通・プレースホルダは `?` で統�
 from __future__ import annotations
 
 import os
+import re
 import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -41,18 +42,68 @@ def execute(sql: str, params: tuple = ()) -> QueryResult:
 
 
 def migrate() -> None:
-    """migrations/ 配下のSQLをファイル名順に実行してテーブルを初期化する。"""
+    """migrations/ 配下のSQLをファイル名順に実行してテーブルを初期化する。
+
+    各SQLファイルは文単位で実行する。`ALTER TABLE ADD COLUMN` は `IF NOT EXISTS` を
+    持たず再実行で失敗するため、PRAGMA table_info で列の存在を確認し、既にある列の
+    ADD COLUMN はスキップして冪等にする（CREATE 系は `IF NOT EXISTS` で元から冪等）。
+    エラー文言に依存しない方式（D1のエラーメッセージ変化に対して堅牢）。
+    """
     for sql_path in sorted(_MIGRATIONS_DIR.glob("*.sql")):
         script = sql_path.read_text()
-        if _use_d1():
-            _d1_query(script, [])
-        else:
-            conn = _sqlite_connection()
-            try:
-                with conn:
-                    conn.executescript(script)
-            finally:
-                conn.close()
+        for stmt in _split_statements(script):
+            add = _parse_add_column(stmt)
+            if add and _column_exists(*add):
+                continue  # 既に適用済みのADD COLUMN（冪等）
+            _execute_ddl(stmt)
+
+
+def _execute_ddl(stmt: str) -> None:
+    if _use_d1():
+        _d1_query(stmt, [])
+    else:
+        conn = _sqlite_connection()
+        try:
+            with conn:
+                conn.execute(stmt)
+        finally:
+            conn.close()
+
+
+_ADD_COLUMN_RE = re.compile(
+    r"ALTER\s+TABLE\s+([`\"\[]?\w+[`\"\]]?)\s+ADD\s+(?:COLUMN\s+)?([`\"\[]?\w+[`\"\]]?)",
+    re.IGNORECASE,
+)
+
+
+def _parse_add_column(stmt: str) -> Optional[tuple[str, str]]:
+    """`ALTER TABLE t ADD COLUMN c ...` から (table, column) を取り出す。該当しなければ None。"""
+    m = _ADD_COLUMN_RE.search(stmt)
+    if not m:
+        return None
+    table = m.group(1).strip('`"[]')
+    column = m.group(2).strip('`"[]')
+    return table, column
+
+
+def _column_exists(table: str, column: str) -> bool:
+    """PRAGMA table_info で列の存在を確認（SQLite/D1両対応・エラー文言に依存しない）。"""
+    # table はマイグレーションSQL由来かつ識別子のみ（_ADD_COLUMN_RE で \w+ 制約）なので補間して安全。
+    rows = execute(f"PRAGMA table_info({table})").rows
+    return any(r.get("name") == column for r in rows)
+
+
+def _split_statements(script: str) -> list[str]:
+    """SQLスクリプトを `;` 区切りの文に分割する（行コメント `--` は除去）。"""
+    cleaned_lines = []
+    for line in script.splitlines():
+        # 行コメントを除去（簡易。文字列リテラル中の `--` は扱わない＝マイグレーションでは未使用）
+        idx = line.find("--")
+        if idx >= 0:
+            line = line[:idx]
+        cleaned_lines.append(line)
+    body = "\n".join(cleaned_lines)
+    return [s.strip() for s in body.split(";") if s.strip()]
 
 
 def _use_d1() -> bool:

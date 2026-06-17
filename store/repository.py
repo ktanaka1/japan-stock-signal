@@ -45,7 +45,8 @@ def get_unread() -> list[Article]:
     """未読記事を取得日時の昇順で返す。"""
     result = execute(
         """
-        SELECT id, title, body, url, fetched_at, is_read
+        SELECT id, title, body, url, fetched_at, is_read,
+               security_code, xbrl_metrics, full_body, correction_reason, body_status
         FROM articles
         WHERE is_read = 0
         ORDER BY fetched_at ASC
@@ -59,6 +60,11 @@ def get_unread() -> list[Article]:
             url=row["url"],
             fetched_at=row["fetched_at"],
             is_read=bool(row["is_read"]),
+            security_code=row["security_code"],
+            xbrl_metrics=row["xbrl_metrics"],
+            full_body=row["full_body"],
+            correction_reason=row["correction_reason"],
+            body_status=row["body_status"],
         )
         for row in result.rows
     ]

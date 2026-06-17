@@ -74,10 +74,12 @@
 
 ```
 1. やのしんJSON（recent.json）から document_url(PDF) / company_code / url_xbrl を取得
-2. url_xbrl が有る  → ZIP DL・解凍 → iXBRL を lxml で標準タグ抽出（§4）→ body_status='xbrl_parsed'
+2. url_xbrl が有る  → ZIP DL・解凍 → iXBRL を lxml で標準タグ抽出（§4）→ body_status='xbrl'
 3. url_xbrl が無い  → document_url(PDF) を DL → pypdf で埋め込みテキスト抽出（§5）→ body_status='pdf_text'
-   - PDFがテキストを持たない(スキャン画像) / 抽出失敗 → body_status='pdf_empty' でフォールバック（タイトル＋サマリー）
+   - PDFがテキストを持たない(スキャン画像) / DL失敗 / 抽出空 → body_status='error' でフォールバック（タイトル＋サマリー）
 4. 抽出結果を articles の追加カラムに保存（§7）
+
+（系統B・非該当はそもそも本文取得せず body_status='title_only' のまま。§7の4値に統一。）
 ```
 
 - TDnetは **RSS→JSONエンドポイントに切替**（`https://webapi.yanoshin.jp/webapi/tdnet/list/recent.json?limit=N`）。
@@ -120,7 +122,7 @@ XBRLが無い系統A開示は `document_url` のPDFを取得し、**埋め込み
   （配当修正PDFで1ページ・約1365字をpypdfで抽出できることを実証済み）。
 - 抽出テキストは長すぎる場合のみ先頭側を優先して上限N字に truncate（修正テーブル・理由は前半に集中）。N字は settings化。
 - **数値の解釈はLLMに委ねる**（自前パーサを作らない方針のため）。§6の厳格プロンプトで「PDF本文中の前回予想と今回予想を比較し方向を確定せよ」と命令する。
-- フォールバック（degrade）: PDFがテキストを持たない（スキャン）/DL失敗/抽出空 → `body_status='pdf_empty'`/`'fetch_failed'` を記録し、タイトル＋RSSサマリーで判定（現状水準）。パイプラインは止めない。
+- フォールバック（degrade）: PDFがテキストを持たない（スキャン）/DL失敗/抽出空 → `body_status='error'` を記録し、タイトル＋RSSサマリーで判定（現状水準）。パイプラインは止めない。
 
 ---
 
@@ -157,11 +159,13 @@ ALTER TABLE articles ADD COLUMN security_code     TEXT;
 ALTER TABLE articles ADD COLUMN xbrl_metrics      TEXT;   -- 正規化数値+機械方向ラベルのJSON（XBRL経路）
 ALTER TABLE articles ADD COLUMN full_body         TEXT;   -- PDF抽出テキスト（PDF経路）
 ALTER TABLE articles ADD COLUMN correction_reason TEXT;   -- XBRL定性タグの修正理由
-ALTER TABLE articles ADD COLUMN body_status       TEXT NOT NULL DEFAULT 'skipped';
+ALTER TABLE articles ADD COLUMN body_status       TEXT NOT NULL DEFAULT 'title_only';
 ```
 
-- `body_status`: `'skipped'`(系統B/非該当) / `'xbrl_parsed'` / `'pdf_text'` / `'pdf_empty'` / `'fetch_failed'` / `'no_match'`。
-- 既存行は新カラム NULL / `body_status='skipped'` で従来挙動を維持。`ALTER TABLE ADD COLUMN` は D1/SQLite両対応。
+- `body_status`: **その開示をどのルートで処理したかを記録する4値に統一**する
+  — `'xbrl'`(XBRL経路で抽出) / `'pdf_text'`(PDFテキスト経路で抽出) / `'title_only'`(系統B・非該当・degrade＝タイトル＋RSSサマリーで判定) / `'error'`(取得・抽出失敗)。
+  細分ステータス（`xbrl_parsed`/`pdf_empty`/`fetch_failed`/`skipped`/`no_match` 等）は使わず、この4値に丸める（後の分析・デバッグの命綱）。
+- 既存行は新カラム NULL / `body_status='title_only'` で従来挙動を維持。`ALTER TABLE ADD COLUMN` は D1/SQLite両対応。
 - store層（`store/models.py` の Article、`store/repository.py` の SELECT/INSERT/プレースホルダ数）に列追加。
 
 ---
@@ -194,7 +198,7 @@ ALTER TABLE articles ADD COLUMN body_status       TEXT NOT NULL DEFAULT 'skipped
 
 ### Phase 2（補強）
 - `tse-rvfc`/`tse-ed-t` Forecast系コンテキスト網羅を運用データで拡充。
-- `body_status` 分布を監視（XBRL率・PDF成功率・degrade率）。`pdf_empty` が多ければ対象開示の傾向を分析。
+- `body_status` 分布を監視（`xbrl`/`pdf_text`/`title_only`/`error` の比率）。`error` が多ければ対象開示の傾向を分析。
 - 系統B（提携・分割・株主異動）のタイトル判定チューニング。
 
 ### 非対象（やらない）
@@ -215,8 +219,8 @@ ALTER TABLE articles ADD COLUMN body_status       TEXT NOT NULL DEFAULT 'skipped
 2. **業績予想 上方/下方（PDFテキスト経路）**: XBRL無し・PDFあり上方修正開示で、PDFテキストから方向を読み `positive`。下方は `negative`。（核心の8割をここで救えること）
 3. **増配/減配**: 配当 前回130→今回160 で `positive`、減配で `negative`。
 4. **決算 増収増益/減収減益**: 売上251,365→279,586 等で増益方向が `positive`。
-5. **二系統**: 系統A取得成功は `body_status` が `'xbrl_parsed'` or `'pdf_text'`。系統B・非該当は `'skipped'` のまま従来分析（コスト非増）。
-6. **degrade耐性**: XBRL無し＋PDFもテキスト無し/DL失敗の記事が、`body_status` に `'pdf_empty'`/`'fetch_failed'` を記録しつつクラッシュせず、タイトル＋サマリーで完走する。
+5. **二系統**: 系統A取得成功は `body_status` が `'xbrl'` or `'pdf_text'`。系統B・非該当は `'title_only'` のまま従来分析（コスト非増）。
+6. **degrade耐性**: XBRL無し＋PDFもテキスト無し/DL失敗の記事が、`body_status='error'` を記録しつつクラッシュせず、タイトル＋サマリーで完走する。
 7. **想定外タクソノミ/PDF**: ホワイトリスト外タグのみのZIPや空テキストPDFでも例外を投げず degrade。
 8. **後方互換**: migration 004 適用後、既存記事（新カラムNULL）が従来どおり分析・配信される。
 9. **証券コード**: `security_code` が保存され、新形式英数字（例 `376A0`）でも壊れない。
