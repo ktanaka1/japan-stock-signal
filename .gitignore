@@ -1,9 +1,28 @@
+# 環境変数・シークレット
 .env
+.env.*
+
+# 認証情報
+credentials.json
+*.pem
+*.key
+service-account.json
+
+# Python
 .venv/
-data/
 __pycache__/
 *.pyc
+
+# プロジェクト固有
+data/
 .wrangler/
 *.pptx
 *.xlsx
 *.docx
+
+# OS・エディタ
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/settings.json
+.idea/
