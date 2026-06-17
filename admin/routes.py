@@ -17,6 +17,7 @@ JST = timezone(timedelta(hours=9))
 _COOKIE_NAME = "admin_session"
 _COOKIE_MAX_AGE = 60 * 60 * 24 * 30  # 30日
 _PER_PAGE = 50
+_PER_PAGE_OPTIONS = [20, 50, 100, 200]
 
 router = APIRouter(prefix="/admin")
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -114,18 +115,21 @@ async def articles_view(
     date: str = "",
     sentiment: str = "",
     page: int = 1,
+    per_page: int = _PER_PAGE,
 ):
     if not _is_authed(request):
         return _login_redirect()
 
     page = max(1, page)
-    offset = (page - 1) * _PER_PAGE
+    if per_page not in _PER_PAGE_OPTIONS:
+        per_page = _PER_PAGE
+    offset = (page - 1) * per_page
 
     from store import analyses
     rows, has_next = analyses.get_articles(
         date_str=date or None,
         sentiment=sentiment or None,
-        limit=_PER_PAGE,
+        limit=per_page,
         offset=offset,
     )
 
@@ -138,7 +142,8 @@ async def articles_view(
         "sentiment": sentiment,
         "page": page,
         "has_next": has_next,
-        "per_page": _PER_PAGE,
+        "per_page": per_page,
+        "per_page_options": _PER_PAGE_OPTIONS,
         "offset": offset,
         "articles": rows,
     })

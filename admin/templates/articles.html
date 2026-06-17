@@ -2,6 +2,25 @@
 {% block title %}記事一覧 - 株シグナル管理{% endblock %}
 {% block content %}
 
+{% set qs = '&date=' ~ date if date else '' %}
+{% set qs = qs ~ ('&sentiment=' ~ sentiment if sentiment else '') %}
+{% set qs = qs ~ '&per_page=' ~ per_page %}
+{% macro pager() %}
+<div style="display:flex; justify-content:space-between; align-items:center">
+  {% if page > 1 %}
+    <a class="btn btn-primary" href="/admin/articles?page={{ page - 1 }}{{ qs }}">← 前へ</a>
+  {% else %}
+    <span></span>
+  {% endif %}
+  <span class="text-muted">{{ page }}ページ</span>
+  {% if has_next %}
+    <a class="btn btn-primary" href="/admin/articles?page={{ page + 1 }}{{ qs }}">次へ →</a>
+  {% else %}
+    <span></span>
+  {% endif %}
+</div>
+{% endmacro %}
+
 <div class="card">
   <h2>記事一覧</h2>
   <div class="filters">
@@ -11,7 +30,7 @@
         日付
         <input type="date" name="date" value="{{ date }}" onchange="this.form.submit()">
       </label>
-      {% if date %}<a href="/admin/articles{% if sentiment %}?sentiment={{ sentiment }}{% endif %}" style="font-size:0.82rem">日付クリア</a>{% endif %}
+      {% if date %}<a href="/admin/articles?per_page={{ per_page }}{% if sentiment %}&sentiment={{ sentiment }}{% endif %}" style="font-size:0.82rem">日付クリア</a>{% endif %}
       <select name="sentiment" onchange="this.form.submit()">
         <option value="">すべての判定</option>
         <option value="positive" {% if sentiment == 'positive' %}selected{% endif %}>ポジティブ</option>
@@ -19,29 +38,34 @@
         <option value="neutral"  {% if sentiment == 'neutral'  %}selected{% endif %}>中立</option>
         <option value="none"     {% if sentiment == 'none'     %}selected{% endif %}>未分析</option>
       </select>
+      <select name="per_page" onchange="this.form.submit()" title="1ページの表示件数">
+        {% for n in per_page_options %}
+        <option value="{{ n }}" {% if per_page == n %}selected{% endif %}>{{ n }}件</option>
+        {% endfor %}
+      </select>
     </form>
     <span class="text-muted">
       {% if articles %}{{ offset + 1 }}〜{{ offset + articles | length }} 件目{% else %}該当なし{% endif %}
-      （{{ page }}ページ）
     </span>
   </div>
 
-  <table>
+  {{ pager() }}
+
+  <table style="margin-top:14px">
     <thead>
       <tr>
-        <th>取得時刻</th>
         <th>タイトル</th>
         <th>判定</th>
         <th>銘柄</th>
         <th>要約 / 判断根拠</th>
         <th>シグナル</th>
         <th>通知</th>
+        <th>取得時刻</th>
       </tr>
     </thead>
     <tbody>
       {% for a in articles %}
       <tr>
-        <td style="white-space:nowrap; color:#999; font-size:0.82rem">{{ a.fetched_at_jst }}</td>
         <td>
           <a href="{{ a.url }}" target="_blank" rel="noopener" class="trunc" title="{{ a.title }}">{{ a.title }}</a>
         </td>
@@ -73,6 +97,7 @@
         <td style="text-align:center">
           {% if a.notified_at %}<span class="badge b-ntf">済</span>{% endif %}
         </td>
+        <td style="white-space:nowrap; color:#999; font-size:0.82rem">{{ a.fetched_at_jst }}</td>
       </tr>
       {% endfor %}
       {% if not articles %}
@@ -83,20 +108,7 @@
     </tbody>
   </table>
 
-  {% set qs = '&date=' ~ date if date else '' %}
-  {% set qs = qs ~ ('&sentiment=' ~ sentiment if sentiment else '') %}
-  <div style="display:flex; justify-content:space-between; margin-top:18px">
-    {% if page > 1 %}
-      <a class="btn btn-primary" href="/admin/articles?page={{ page - 1 }}{{ qs }}">← 前へ</a>
-    {% else %}
-      <span></span>
-    {% endif %}
-    {% if has_next %}
-      <a class="btn btn-primary" href="/admin/articles?page={{ page + 1 }}{{ qs }}">次へ →</a>
-    {% else %}
-      <span></span>
-    {% endif %}
-  </div>
+  <div style="margin-top:18px">{{ pager() }}</div>
 </div>
 
 {% endblock %}
