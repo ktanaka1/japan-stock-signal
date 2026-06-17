@@ -86,7 +86,7 @@
 | DB | Cloudflare D1 |
 | 収集・精査・通知の定期実行 | GitHub Actions schedule（publicリポジトリのため無制限） |
 | LINE Webhookサーバー（受信者管理） | Render Free Web Service |
-| LLM | Gemini API（gemini-2.5-flash、無料枠） |
+| LLM | Gemini API（gemini-3.5-flash、無料枠） |
 
 ## 将来の拡張候補（未実装）
 

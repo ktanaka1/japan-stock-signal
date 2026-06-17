@@ -29,7 +29,10 @@ _BATCH_SYSTEM_PROMPT = (
     "記事ごとに1つの結果を返し、index フィールドに記事番号をそのまま入れてください。"
 )
 
-# Gemini無料枠は10リクエスト/分程度のため、バッチ間で待機する
+# 使用するGeminiモデル（分類・抽出タスク向けにFlash系を採用 / ADR参照）
+_MODEL = "gemini-3.5-flash"
+
+# Geminiのレート制限対策にバッチ間で待機する（実際の値はsettingsで上書き可能）
 _BATCH_INTERVAL_SECONDS = 7
 
 # 連続でバッチが失敗したら打ち切る（日次クォータ枯渇時にリトライ待機で
@@ -129,7 +132,7 @@ def _llm_analyze(title: str, body: str, _retry: int = 3) -> AnalysisResult:
     for attempt in range(_retry):
         try:
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model=_MODEL,
                 contents=f"タイトル：{title}\n\n本文：{body[:800]}",
                 config=types.GenerateContentConfig(
                     system_instruction=_SYSTEM_PROMPT,
@@ -183,7 +186,7 @@ def _llm_analyze_batch(
     for attempt in range(_retry):
         try:
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model=_MODEL,
                 contents=contents,
                 config=types.GenerateContentConfig(
                     system_instruction=system_prompt,
