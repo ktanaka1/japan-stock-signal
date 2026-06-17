@@ -7,13 +7,16 @@
   <title>{% block title %}株シグナル 管理{% endblock %}</title>
   <style>
     * { box-sizing: border-box; }
+    html, body { max-width: 100%; overflow-x: hidden; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; background: #f4f6f9; color: #333; font-size: 14px; }
     header { background: #1a1a2e; color: white; padding: 12px 24px; display: flex; align-items: center; flex-wrap: wrap; gap: 10px 22px; }
     header strong { font-size: 1rem; color: white; }
     header a { color: #9aa; text-decoration: none; font-size: 0.9rem; }
     header a:hover { color: white; }
     .main { max-width: 1300px; margin: 24px auto; padding: 0 24px; }
-    .card { background: white; border-radius: 8px; padding: 20px 24px; margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.07); }
+    .card { background: white; border-radius: 8px; padding: 20px 24px; margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.07); max-width: 100%; }
+    /* テーブルがカード幅を超えたらカード内部で横スクロール（ページ全体は揺らさない） */
+    .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
     .card h2 { margin: 0 0 16px; font-size: 0.8rem; color: #888; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
     .stats { display: flex; gap: 40px; flex-wrap: wrap; }
     .stat .n { font-size: 2rem; font-weight: 700; line-height: 1; }
