@@ -40,6 +40,7 @@ def run() -> None:
         batch_interval=int(settings["batch_interval_seconds"]),
         max_failures=int(settings["max_consecutive_failures"]),
         model=settings["gemini_model"],
+        body_max_chars=int(settings["body_max_chars"]),
     )
 
     signal_sentiments = set(settings["signal_sentiments"].split(","))

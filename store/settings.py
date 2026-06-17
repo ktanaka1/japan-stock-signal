@@ -15,7 +15,25 @@ _SYSTEM_PROMPT_DEFAULT = (
     "reason: sentiment をそう判断した根拠を日本語で2〜3文で説明する。"
     "中立と判断した場合はその理由も記載する。\n"
     "stocks: 関連する日本株銘柄のリスト（証券コード4桁と銘柄名）。"
-    "銘柄が特定できない場合は空リストにする。"
+    "銘柄が特定できない場合は空リストにする。\n"
+    "\n"
+    "【数値が与えられた開示の判定ルール（厳守）】\n"
+    "業績予想の修正・決算・配当の開示で、数値（XBRL確定値 or 本文）が与えられている場合、"
+    "安易に neutral にしてはならない。\n"
+    "今回値 > 前回予想（上方修正・増配・増益）= positive、"
+    "今回値 < 前回予想（下方修正・減配・減益）= negative。\n"
+    "数値や機械方向ラベルがある場合はそれを根拠に方向を確定し、"
+    "reason に前回予想比/前期比を必ず明記せよ。\n"
+    "neutral は『株価に影響しない』と確信できる時のみ。"
+    "数値があるのに情報不足を理由に neutral にしてはならない。\n"
+    "\n"
+    "【最重要・絶対厳守】\n"
+    "渡されたデータが『XBRL抽出数値（確定値）』である場合、それは100%正確な事実である。"
+    "その数値の比較結果（上昇/下落/据え置き）のみを絶対の根拠として方向を判定せよ。"
+    "XBRL数値が与えられているときに、テキスト（修正理由など）から別の要因を推測して"
+    "判定を覆してはならない。\n"
+    "本文テキスト（PDF抽出）のみが与えられた場合は、本文中の前回予想と今回予想"
+    "（または前期実績）を見つけ、数値を比較して方向を判定せよ。"
 )
 
 _RSS_FEEDS_DEFAULT = "\n".join([
@@ -45,6 +63,7 @@ DEFAULTS: dict[str, str] = {
     "rss_feeds": _RSS_FEEDS_DEFAULT,
     "batch_interval_seconds": "7",
     "max_consecutive_failures": "3",
+    "body_max_chars": "4000",
     "body_fetch_triggers_numeric": _BODY_FETCH_TRIGGERS_NUMERIC_DEFAULT,
     "body_fetch_triggers_catalyst": _BODY_FETCH_TRIGGERS_CATALYST_DEFAULT,
 }

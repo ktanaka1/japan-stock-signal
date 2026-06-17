@@ -193,6 +193,7 @@ async def settings_save(
     rss_feeds: str = Form(""),
     batch_interval_seconds: str = Form("7"),
     max_consecutive_failures: str = Form("3"),
+    body_max_chars: str = Form("4000"),
 ):
     if not _is_authed(request):
         return _login_redirect()
@@ -212,6 +213,7 @@ async def settings_save(
         "rss_feeds": rss_feeds.strip(),
         "batch_interval_seconds": batch_interval_seconds.strip() or "7",
         "max_consecutive_failures": max_consecutive_failures.strip() or "3",
+        "body_max_chars": body_max_chars.strip() or "4000",
     })
 
     return RedirectResponse("/admin/settings?msg=設定を保存しました", status_code=303)

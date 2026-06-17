@@ -65,6 +65,11 @@
         <input type="number" name="max_consecutive_failures" value="{{ settings.max_consecutive_failures }}"
           min="1" max="10" style="width:80px; margin-top:6px">
       </div>
+      <div class="form-group">
+        <label>本文入力上限（文字）<br><small>PDF/XBRL本文をLLMに渡す際の最大文字数</small></label>
+        <input type="number" name="body_max_chars" value="{{ settings.body_max_chars }}"
+          min="500" max="20000" step="500" style="width:100px; margin-top:6px">
+      </div>
     </div>
   </div>
 
