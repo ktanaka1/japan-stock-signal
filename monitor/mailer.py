@@ -27,6 +27,28 @@ _SENTIMENT_LABEL = {
 }
 
 
+def send_digest_alert(error_detail: str, run_at_jst: str) -> None:
+    """LINE配信エラーをメールで通知する。REPORT_EMAIL 未設定の場合はスキップ。
+
+    Args:
+        error_detail: エラーの詳細テキスト
+        run_at_jst:   配信実行日時（JST）の文字列表現
+    """
+    to_addr = os.getenv("REPORT_EMAIL", "").strip()
+    if not to_addr:
+        return
+
+    subject = f"[株シグナル] LINE配信エラー {run_at_jst}"
+    body = "\n".join([
+        f"LINE配信中にエラーが発生しました。",
+        f"実行日時: {run_at_jst}",
+        "",
+        "エラー詳細:",
+        error_detail,
+    ])
+    _send(to_addr, subject, body)
+
+
 def send_analysis_report(
     results: List[Tuple[object, Optional[AnalysisResult]]],
     signal_ids: set,

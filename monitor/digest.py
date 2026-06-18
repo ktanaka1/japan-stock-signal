@@ -8,12 +8,16 @@ from __future__ import annotations
 
 import logging
 import sys
+import traceback
 from datetime import datetime, timedelta, timezone
+from typing import List, Optional
 
 from store.db import migrate
 from store import signals
+from store import digest_runs
 from store.recipients import get_all as get_recipients
 from monitor.notifier import send_text
+from monitor import mailer
 
 logging.basicConfig(
     level=logging.INFO,
@@ -31,24 +35,77 @@ _MAX_MESSAGE_CHARS = 4500
 
 def run() -> None:
     migrate()
-    items = signals.get_unnotified()
-    recipients = get_recipients()
-    if not recipients:
-        logger.info("No recipients registered, keeping %d signals unnotified", len(items))
-        return
 
-    if not items:
-        logger.info("No signals; sending zero-signal notice")
-        send_text(_zero_signal_message(), recipients)
-        return
+    now_jst = datetime.now(JST)
+    run_at_jst = now_jst.strftime("%Y-%m-%d %H:%M JST")
 
-    messages = _build_messages(items)
-    logger.info("Sending digest: %d signals in %d message(s)", len(items), len(messages))
-    for text in messages:
-        send_text(text, recipients)
+    # 集計変数
+    total_ok: int = 0
+    total_error: int = 0
+    error_detail: Optional[str] = None
+    notified_ids: List[int] = []
+    status: str = "ok"
 
-    signals.mark_notified([s["id"] for s in items])
-    logger.info("Done: %d signals notified", len(items))
+    try:
+        items = signals.get_unnotified()
+        recipients = get_recipients()
+
+        if not recipients:
+            logger.info("No recipients registered, keeping %d signals unnotified", len(items))
+            status = "no_recipients"
+            # no_recipients は正常終了扱い。記録だけして終わる（finallyで記録する）
+        elif not items:
+            logger.info("No signals; sending zero-signal notice")
+            ok, err = send_text(_zero_signal_message(), recipients)
+            total_ok += ok
+            total_error += err
+        else:
+            messages = _build_messages(items)
+            logger.info("Sending digest: %d signals in %d message(s)", len(items), len(messages))
+            for text in messages:
+                ok, err = send_text(text, recipients)
+                total_ok += ok
+                total_error += err
+
+            if total_error == 0:
+                # 全送信成功時のみ通知済みにする
+                notified_ids = [s["id"] for s in items]
+                signals.mark_notified(notified_ids)
+                logger.info("Done: %d signals notified", len(items))
+            else:
+                logger.warning(
+                    "LINE send partially failed: ok=%d error=%d; signals NOT marked notified",
+                    total_ok, total_error,
+                )
+
+        # ステータス判定（no_recipients は上で設定済みなのでスキップ）
+        if status != "no_recipients":
+            if total_error > 0 and total_ok > 0:
+                status = "partial"
+                error_detail = f"LINE multicast: {total_ok} チャンク成功 / {total_error} チャンク失敗"
+            elif total_error > 0:
+                status = "error"
+                error_detail = f"LINE multicast: 全 {total_error} チャンクが失敗"
+
+    except Exception:
+        status = "error"
+        error_detail = traceback.format_exc()
+        logger.exception("digest.run() failed with unexpected error")
+
+    finally:
+        # 成否にかかわらず常に記録する
+        digest_runs.record(
+            status=status,
+            signal_count=len(notified_ids) if notified_ids else 0,
+            line_ok=total_ok,
+            line_error=total_error,
+            error_detail=error_detail,
+            notified_ids=notified_ids if notified_ids else None,
+        )
+
+    # LINE送信失敗時はメールアラート
+    if error_detail:
+        mailer.send_digest_alert(error_detail=error_detail, run_at_jst=run_at_jst)
 
 
 def _header(count: int) -> str:
