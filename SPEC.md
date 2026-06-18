@@ -34,6 +34,34 @@
   - シグナルゼロの日もその旨を1通送る（無通知と障害を区別できるようにする）
 ```
 
+### 収集→分析→配信フロー図
+
+```mermaid
+flowchart TD
+    RSS["RSS / TDnet フィード"] -->|1時間ごと 6:00-23:00| COL["collector（収集役）"]
+    COL -->|新着のみ・URLで重複排除| ART[("articles<br/>未読")]
+
+    ART -->|2時間ごと 7:10-23:10| MON["monitor（精査役）<br/>Geminiバッチ分析"]
+    MON --> DEC{"銘柄あり<br/>かつ pos/neg?"}
+    DEC -->|Yes| SIG[("signals<br/>未通知")]
+    DEC -->|"No（中立/銘柄なし）"| RD["既読化のみ（記録しない）"]
+
+    SIG -->|平日 朝7:30| DIG["digest（通知役）"]
+    ART -.->|シグナル0件でも<br/>「該当なし」1通| DIG
+
+    DIG --> SEND{"LINE Multicast 送信"}
+    SEND -->|成功| LINE["LINE 受信者へ配信"]
+    SEND -->|成功| MARK["signals を通知済みにマーク"]
+    SEND -->|"失敗/例外"| ALERT["管理者へメールアラート<br/>（signalsは未マーク＝再送可能）"]
+
+    DIG ==>|成否を必ず記録| RUNS[("digest_runs<br/>配信ログ")]
+    RUNS --> ADMIN["管理画面 /admin で<br/>遡って障害調査"]
+```
+
+> 朝の定期配信は GitHub Actions で `collect→analyze→deliver` を直列実行（ADR-002）。
+> 管理画面の「即時配信」も同じ `_run_full_pipeline` を呼ぶ。
+> `digest_runs` への記録は成否によらず必ず行い（`finally`）、失敗時のみメールアラートを送る。
+
 設計判断のポイント:
 
 - **収集は1時間ごと**: RSSは「直近N件」しか見えない窓（TDnetは300件）なので、1日1回の一括取得だと窓から流れた開示を取りこぼす
