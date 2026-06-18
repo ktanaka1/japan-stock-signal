@@ -136,12 +136,15 @@ def _http_get_json(url: str) -> dict:
             status = resp.status_code
             if status == 200:
                 return resp.json()
-            if status == 429 or 500 <= status < 600:
-                if i < len(backoffs):
-                    time.sleep(backoffs[i])
-                    continue
+            # 5xx/429 は一過性とみなしリトライ。枯渇後は raise_for_status() で伝播。
+            if (status == 429 or 500 <= status < 600) and i < len(backoffs):
+                time.sleep(backoffs[i])
+                continue
+            # 4xx（404/401/400 等）の恒久エラー、および枯渇後の 5xx/429 は即時伝播。
             resp.raise_for_status()
-        except httpx.HTTPError as exc:
+        except httpx.RequestError as exc:
+            # 通信エラー（ConnectTimeout/ReadTimeout/ConnectError 等）のみリトライ。
+            # HTTPStatusError は RequestError に該当しないため、ここでは捕捉されず即時伝播する。
             last_exc = exc
             if i < len(backoffs):
                 time.sleep(backoffs[i])
