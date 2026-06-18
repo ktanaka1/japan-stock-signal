@@ -152,6 +152,15 @@ async def articles_view(
         limit=per_page,
         offset=offset,
     )
+    total = analyses.count_articles(
+        date_str=date or None,
+        year=year_filter,
+        sentiment=sentiment or None,
+        code=code or None,
+    )
+    # 表示レンジ（rowsが0件なら0〜0。範囲外ページでもendが暴走しないよう保護）
+    start = offset + 1 if rows else 0
+    end = offset + len(rows) if rows else 0
 
     for row in rows:
         row["fetched_at_jst"] = _to_jst_time(row.get("fetched_at", "") or "")
@@ -168,6 +177,9 @@ async def articles_view(
         "per_page": per_page,
         "per_page_options": _PER_PAGE_OPTIONS,
         "offset": offset,
+        "total": total,
+        "start": start,
+        "end": end,
         "articles": rows,
     })
 

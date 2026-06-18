@@ -67,7 +67,7 @@
         onchange="this.form.submit()" style="width:110px" title="銘柄コードで絞り込み（コード入力後Enter、前方一致）">
     </form>
     <span class="text-muted count">
-      {% if articles %}{{ offset + 1 }}〜{{ offset + articles | length }} 件目{% else %}該当なし{% endif %}
+      {% if not total %}0件{% elif articles %}{{ start }}〜{{ end }} 件目 / {{ total }}件{% else %}全{{ total }}件{% endif %}
     </span>
   </div>
 

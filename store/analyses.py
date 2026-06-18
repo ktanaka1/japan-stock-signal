@@ -38,19 +38,16 @@ def get_available_years() -> list[str]:
     return [r["y"] for r in rows if r["y"]]
 
 
-def get_articles(
-    date_str: str | None = None,
-    year: str | None = None,
-    sentiment: str | None = None,
-    code: str | None = None,
-    limit: int = 50,
-    offset: int = 0,
-) -> tuple[list[dict], bool]:
-    """記事を分析結果・シグナル情報付きで新しい順に返す。未分析記事も含む。
+def _build_article_filter(
+    date_str: str | None,
+    year: str | None,
+    sentiment: str | None,
+    code: str | None,
+) -> tuple[str, list]:
+    """記事一覧のフィルタから WHERE句と paramsを組み立てる。
 
-    date_str / year / sentiment / code は任意のフィルタ。sentiment="none" は未分析記事のみ。
-    year は対象年(JST)。code は銘柄コードの前方一致（stocks JSON内のいずれかのcodeにマッチ）。
-    次ページの有無を判定するため limit+1 件取得し、(rows[:limit], has_next) を返す。
+    get_articles / count_articles で共通利用し、件数と一覧の条件ズレを防ぐ。
+    （JOIN は a=articles / aa=article_analyses 前提）
     """
     where = []
     params: list = []
@@ -73,6 +70,24 @@ def get_articles(
         )
         params.append(code + "%")
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+    return where_sql, params
+
+
+def get_articles(
+    date_str: str | None = None,
+    year: str | None = None,
+    sentiment: str | None = None,
+    code: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> tuple[list[dict], bool]:
+    """記事を分析結果・シグナル情報付きで新しい順に返す。未分析記事も含む。
+
+    date_str / year / sentiment / code は任意のフィルタ。sentiment="none" は未分析記事のみ。
+    year は対象年(JST)。code は銘柄コードの前方一致（stocks JSON内のいずれかのcodeにマッチ）。
+    次ページの有無を判定するため limit+1 件取得し、(rows[:limit], has_next) を返す。
+    """
+    where_sql, params = _build_article_filter(date_str, year, sentiment, code)
 
     sql = f"""
         SELECT
@@ -102,6 +117,27 @@ def get_articles(
     for row in rows:
         row["stocks"] = json.loads(row["stocks"]) if row.get("stocks") else []
     return rows, has_next
+
+
+def count_articles(
+    date_str: str | None = None,
+    year: str | None = None,
+    sentiment: str | None = None,
+    code: str | None = None,
+) -> int:
+    """get_articles と同一フィルタに一致する記事の総件数を返す。
+
+    WHERE句は get_articles と共通の _build_article_filter を使うため条件は完全一致。
+    """
+    where_sql, params = _build_article_filter(date_str, year, sentiment, code)
+    sql = f"""
+        SELECT COUNT(*) AS cnt
+        FROM articles a
+        LEFT JOIN article_analyses aa ON a.id = aa.article_id
+        LEFT JOIN signals s ON a.id = s.article_id
+        {where_sql}
+    """
+    return execute(sql, tuple(params)).rows[0]["cnt"]
 
 
 def get_stats_by_date(date_str: str) -> dict:
