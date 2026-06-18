@@ -10,7 +10,7 @@
 {% endif %}
 
 <div class="card">
-  <h2>パイプライン統計（直近{{ daily_stats|length }}日）</h2>
+  <h2>パイプライン統計{% if daily_stats %}（{% if daily_stats|length > 1 %}{{ daily_stats[-1].date }} 〜 {{ daily_stats[0].date }}{% else %}{{ daily_stats[0].date }}{% endif %}）{% endif %}</h2>
   {% if daily_stats %}
   <div class="table-wrap">
     <table>
@@ -37,7 +37,23 @@
     </table>
   </div>
   {% else %}
-  <p class="text-muted" style="margin:0">データなし</p>
+  <p class="text-muted" style="margin:0">この期間のデータはありません</p>
+  {% endif %}
+
+  {% if stats_page > 0 or has_older %}
+  <div class="pager" style="margin-top:14px; margin-bottom:0; justify-content:space-between">
+    <span>
+      {% if stats_page > 0 %}<a class="nav" href="/admin?stats_page={{ stats_page - 1 }}">← 新しい3日</a>{% endif %}
+    </span>
+    {% if daily_stats %}
+    <span class="text-muted" style="font-size:0.85rem">
+      {% if daily_stats|length > 1 %}{{ daily_stats[-1].date }} 〜 {{ daily_stats[0].date }}{% else %}{{ daily_stats[0].date }}{% endif %}
+    </span>
+    {% endif %}
+    <span>
+      {% if has_older %}<a class="nav" href="/admin?stats_page={{ stats_page + 1 }}">過去3日 →</a>{% endif %}
+    </span>
+  </div>
   {% endif %}
 </div>
 

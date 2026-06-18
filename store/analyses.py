@@ -184,29 +184,39 @@ def get_stats_by_date(date_str: str) -> dict:
     }
 
 
-def get_stats_recent_days(days: int = 3) -> list[dict]:
-    """収集記事がある日(JST)を新しい順に最大 days 日分、パイプライン統計付きで返す。
+def get_stats_recent_days(days: int = 3, page: int = 0) -> tuple[list[dict], bool]:
+    """収集記事がある日(JST)を新しい順に days 日分、パイプライン統計付きで返す（ページング対応）。
 
+    page は0始まり（0=最新days日、1=その前のdays日…）。記事がある日(JST)を新しい順に並べ、
+    page*days 日分スキップして次の days 日分を対象に集計する。
     集計定義は get_stats_by_date と完全に同一にする
     （analyzed=article_analyses / signaled=signals / notified=signals.notified_at IS NOT NULL、
      いずれも記事の fetched_at JST基準）。
     D1往復を抑えるため日付でGROUP BYした集計を articles/analyzed/signaled/notified の
     計4クエリで取得し、Python側で日付キーにマージする。
-    戻り値: list[dict]（新しい順）。各dict = {date, articles, analyzed, signaled, notified}
+    さらに過去があるか(has_older)は対象日付の取得時に days+1 件取れるかで判定する
+    （記事一覧の has_next と同じ手法）。
+    戻り値: (list[dict], has_older)。各dict = {date, articles, analyzed, signaled, notified}（新しい順）。
     """
     if days <= 0:
-        return []
+        return [], False
+    page = max(0, page)
+    offset = page * days
 
-    # 対象日: 記事がある最新N日（JST）。これを基準に他カウントを左マージする。
+    # 対象日: 記事がある日(JST)を新しい順に offset スキップして days+1 件取得。
+    # +1 件取れたら「さらに過去がある」(has_older)。これを基準に他カウントを左マージする。
     target_rows = execute(
         "SELECT date(fetched_at, '+9 hours') AS d, COUNT(*) AS cnt "
         "FROM articles "
         "GROUP BY date(fetched_at, '+9 hours') "
-        "ORDER BY d DESC LIMIT ?",
-        (days,),
+        "ORDER BY d DESC LIMIT ? OFFSET ?",
+        (days + 1, offset),
     ).rows
+
+    has_older = len(target_rows) > days
+    target_rows = target_rows[:days]
     if not target_rows:
-        return []
+        return [], has_older
 
     dates = [r["d"] for r in target_rows]
     articles_map = {r["d"]: r["cnt"] for r in target_rows}
@@ -256,7 +266,7 @@ def get_stats_recent_days(days: int = 3) -> list[dict]:
         ).rows
     }
 
-    return [
+    stats = [
         {
             "date": d,
             "articles": articles_map.get(d, 0),
@@ -266,3 +276,4 @@ def get_stats_recent_days(days: int = 3) -> list[dict]:
         }
         for d in dates
     ]
+    return stats, has_older

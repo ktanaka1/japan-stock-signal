@@ -99,12 +99,14 @@ async def logout():
 
 
 @router.get("", response_class=HTMLResponse)
-async def dashboard(request: Request, msg: str = None):
+async def dashboard(request: Request, msg: str = None, stats_page: int = 0):
     if not _is_authed(request):
         return _login_redirect()
 
+    stats_page = max(0, stats_page)
+
     from store import analyses, digest_runs
-    daily_stats = analyses.get_stats_recent_days(_DASHBOARD_DAYS)
+    daily_stats, has_older = analyses.get_stats_recent_days(_DASHBOARD_DAYS, page=stats_page)
 
     runs = digest_runs.get_recent(30)
     for run in runs:
@@ -113,6 +115,8 @@ async def dashboard(request: Request, msg: str = None):
     return templates.TemplateResponse("index.html", {
         "request": request,
         "daily_stats": daily_stats,
+        "stats_page": stats_page,
+        "has_older": has_older,
         "runs": runs,
         "msg": msg,
         "pipeline_running": _pipeline_running,
