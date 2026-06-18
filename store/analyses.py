@@ -182,3 +182,87 @@ def get_stats_by_date(date_str: str) -> dict:
         "signaled": signaled,
         "notified": notified,
     }
+
+
+def get_stats_recent_days(days: int = 3) -> list[dict]:
+    """収集記事がある日(JST)を新しい順に最大 days 日分、パイプライン統計付きで返す。
+
+    集計定義は get_stats_by_date と完全に同一にする
+    （analyzed=article_analyses / signaled=signals / notified=signals.notified_at IS NOT NULL、
+     いずれも記事の fetched_at JST基準）。
+    D1往復を抑えるため日付でGROUP BYした集計を articles/analyzed/signaled/notified の
+    計4クエリで取得し、Python側で日付キーにマージする。
+    戻り値: list[dict]（新しい順）。各dict = {date, articles, analyzed, signaled, notified}
+    """
+    if days <= 0:
+        return []
+
+    # 対象日: 記事がある最新N日（JST）。これを基準に他カウントを左マージする。
+    target_rows = execute(
+        "SELECT date(fetched_at, '+9 hours') AS d, COUNT(*) AS cnt "
+        "FROM articles "
+        "GROUP BY date(fetched_at, '+9 hours') "
+        "ORDER BY d DESC LIMIT ?",
+        (days,),
+    ).rows
+    if not target_rows:
+        return []
+
+    dates = [r["d"] for r in target_rows]
+    articles_map = {r["d"]: r["cnt"] for r in target_rows}
+
+    placeholders = ",".join(["?"] * len(dates))
+
+    analyzed_map = {
+        r["d"]: r["cnt"]
+        for r in execute(
+            f"""
+            SELECT date(a.fetched_at, '+9 hours') AS d, COUNT(*) AS cnt
+            FROM article_analyses aa
+            JOIN articles a ON a.id = aa.article_id
+            WHERE date(a.fetched_at, '+9 hours') IN ({placeholders})
+            GROUP BY date(a.fetched_at, '+9 hours')
+            """,
+            tuple(dates),
+        ).rows
+    }
+
+    signaled_map = {
+        r["d"]: r["cnt"]
+        for r in execute(
+            f"""
+            SELECT date(a.fetched_at, '+9 hours') AS d, COUNT(*) AS cnt
+            FROM signals s
+            JOIN articles a ON a.id = s.article_id
+            WHERE date(a.fetched_at, '+9 hours') IN ({placeholders})
+            GROUP BY date(a.fetched_at, '+9 hours')
+            """,
+            tuple(dates),
+        ).rows
+    }
+
+    notified_map = {
+        r["d"]: r["cnt"]
+        for r in execute(
+            f"""
+            SELECT date(a.fetched_at, '+9 hours') AS d, COUNT(*) AS cnt
+            FROM signals s
+            JOIN articles a ON a.id = s.article_id
+            WHERE date(a.fetched_at, '+9 hours') IN ({placeholders})
+              AND s.notified_at IS NOT NULL
+            GROUP BY date(a.fetched_at, '+9 hours')
+            """,
+            tuple(dates),
+        ).rows
+    }
+
+    return [
+        {
+            "date": d,
+            "articles": articles_map.get(d, 0),
+            "analyzed": analyzed_map.get(d, 0),
+            "signaled": signaled_map.get(d, 0),
+            "notified": notified_map.get(d, 0),
+        }
+        for d in dates
+    ]

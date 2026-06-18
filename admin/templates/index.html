@@ -1,32 +1,44 @@
 {% extends "base.html" %}
 {% block content %}
 
+{% if pipeline_running %}
+<div class="card" style="border-left:4px solid #2d8cff; background:#eef5ff;">
+  <strong>⏳ 分析パイプライン実行中…</strong>
+  <span class="text-muted">この画面は15秒ごとに自動更新され、「分析済」の増加を確認できます。</span>
+</div>
+<script>setTimeout(function () { location.reload(); }, 15000);</script>
+{% endif %}
+
 <div class="card">
-  <h2>パイプライン統計</h2>
-  <form method="get" action="/admin" style="margin-bottom:20px; display:flex; gap:10px; align-items:center">
-    <input type="date" name="date" value="{{ date }}" onchange="this.form.submit()">
-  </form>
-  <div class="stats">
-    <div class="stat">
-      <div class="n">{{ stats.articles }}</div>
-      <div class="l">収集記事</div>
-    </div>
-    <div class="stat">
-      <div class="n">{{ stats.analyzed }}</div>
-      <div class="l">分析済</div>
-    </div>
-    <div class="stat c-pos">
-      <div class="n">{{ stats.signaled }}</div>
-      <div class="l">シグナル化</div>
-    </div>
-    <div class="stat">
-      <div class="n">{{ stats.notified }}</div>
-      <div class="l">通知済</div>
-    </div>
+  <h2>パイプライン統計（直近{{ daily_stats|length }}日）</h2>
+  {% if daily_stats %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>日付</th>
+          <th style="text-align:right">収集記事</th>
+          <th style="text-align:right">分析済</th>
+          <th style="text-align:right">シグナル化</th>
+          <th style="text-align:right">通知済</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in daily_stats %}
+        <tr>
+          <td style="white-space:nowrap"><a href="/admin/articles?date={{ row.date }}" title="この日の記事一覧を見る">{{ row.date }}</a></td>
+          <td style="text-align:right">{{ row.articles }}</td>
+          <td style="text-align:right">{{ row.analyzed }}</td>
+          <td style="text-align:right" class="{% if row.signaled %}c-pos{% endif %}">{{ row.signaled }}</td>
+          <td style="text-align:right">{{ row.notified }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
-  <div style="margin-top:16px">
-    <a href="/admin/articles?date={{ date }}" class="btn btn-primary" style="font-size:0.85rem">この日の記事一覧を見る →</a>
-  </div>
+  {% else %}
+  <p class="text-muted" style="margin:0">データなし</p>
+  {% endif %}
 </div>
 
 <div class="card">

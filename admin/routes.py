@@ -19,6 +19,7 @@ _COOKIE_NAME = "admin_session"
 _COOKIE_MAX_AGE = 60 * 60 * 24 * 30  # 30日
 _PER_PAGE = 50
 _PER_PAGE_OPTIONS = [20, 50, 100, 200]
+_DASHBOARD_DAYS = 3  # ダッシュボードのパイプライン統計の表示日数
 
 router = APIRouter(prefix="/admin")
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -98,14 +99,12 @@ async def logout():
 
 
 @router.get("", response_class=HTMLResponse)
-async def dashboard(request: Request, date: str = None, msg: str = None):
+async def dashboard(request: Request, msg: str = None):
     if not _is_authed(request):
         return _login_redirect()
-    if not date:
-        date = _today_jst()
 
     from store import analyses, digest_runs
-    stats = analyses.get_stats_by_date(date)
+    daily_stats = analyses.get_stats_recent_days(_DASHBOARD_DAYS)
 
     runs = digest_runs.get_recent(30)
     for run in runs:
@@ -113,8 +112,7 @@ async def dashboard(request: Request, date: str = None, msg: str = None):
 
     return templates.TemplateResponse("index.html", {
         "request": request,
-        "date": date,
-        "stats": stats,
+        "daily_stats": daily_stats,
         "runs": runs,
         "msg": msg,
         "pipeline_running": _pipeline_running,
