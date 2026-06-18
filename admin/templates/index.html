@@ -37,4 +37,48 @@
   </form>
 </div>
 
+<div class="card">
+  <h2>直近の配信ログ</h2>
+  {% if runs %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>日時(JST)</th>
+          <th>結果</th>
+          <th>シグナル数</th>
+          <th>LINE送信(成/失)</th>
+          <th>エラー詳細</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for run in runs %}
+        <tr>
+          <td style="white-space:nowrap">{{ run.run_at_jst }}</td>
+          <td>
+            {% if run.status == "ok" %}<span class="badge b-pos">ok</span>
+            {% elif run.status == "partial" %}<span class="badge b-ntf">partial</span>
+            {% elif run.status == "error" %}<span class="badge b-neg">error</span>
+            {% elif run.status == "no_recipients" %}<span class="badge b-none">no_recipients</span>
+            {% else %}<span class="badge b-none">{{ run.status }}</span>{% endif %}
+          </td>
+          <td>{{ run.signal_count }}</td>
+          <td>{{ run.line_ok }} / {{ run.line_error }}</td>
+          <td>
+            {% if run.error_detail %}
+            <span class="trunc" title="{{ run.error_detail }}">{{ run.error_detail }}</span>
+            {% else %}
+            <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-muted" style="margin:0">配信ログはまだありません。</p>
+  {% endif %}
+</div>
+
 {% endblock %}

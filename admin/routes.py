@@ -98,13 +98,18 @@ async def dashboard(request: Request, date: str = None, msg: str = None):
     if not date:
         date = _today_jst()
 
-    from store import analyses
+    from store import analyses, digest_runs
     stats = analyses.get_stats_by_date(date)
+
+    runs = digest_runs.get_recent(30)
+    for run in runs:
+        run["run_at_jst"] = _to_jst_time(run.get("run_at", "") or "")
 
     return templates.TemplateResponse("index.html", {
         "request": request,
         "date": date,
         "stats": stats,
+        "runs": runs,
         "msg": msg,
     })
 
