@@ -8,18 +8,23 @@
 {% set qs_nopp = qs_nopp ~ ('&code=' ~ code if code else '') %}
 {% set qs = qs_nopp ~ '&per_page=' ~ per_page %}
 {% macro pager() %}
+{% set total_pages = ((total + per_page - 1) // per_page) if total else 1 %}
 {% set start = page - 2 if page - 2 > 1 else 1 %}
+{% set end = page + 2 if page + 2 < total_pages else total_pages %}
 <div class="pager">
   {% if page > 1 %}<a class="nav" href="/admin/articles?page={{ page - 1 }}{{ qs }}">← 前へ</a>{% endif %}
   {% if start > 1 %}
     <a href="/admin/articles?page=1{{ qs }}">1</a>
     {% if start > 2 %}<span class="ellipsis">…</span>{% endif %}
   {% endif %}
-  {% for p in range(start, page + 1) %}
+  {% for p in range(start, end + 1) %}
     {% if p == page %}<span class="current">{{ p }}</span>{% else %}<a href="/admin/articles?page={{ p }}{{ qs }}">{{ p }}</a>{% endif %}
   {% endfor %}
-  {% if has_next %}<a href="/admin/articles?page={{ page + 1 }}{{ qs }}">{{ page + 1 }}</a>{% endif %}
-  {% if has_next %}<a class="nav" href="/admin/articles?page={{ page + 1 }}{{ qs }}">次へ →</a>{% endif %}
+  {% if end < total_pages %}
+    {% if end < total_pages - 1 %}<span class="ellipsis">…</span>{% endif %}
+    <a href="/admin/articles?page={{ total_pages }}{{ qs }}">{{ total_pages }}</a>
+  {% endif %}
+  {% if page < total_pages %}<a class="nav" href="/admin/articles?page={{ page + 1 }}{{ qs }}">次へ →</a>{% endif %}
 </div>
 {% endmacro %}
 {% macro perpage_select() %}
