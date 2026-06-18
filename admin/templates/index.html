@@ -32,8 +32,11 @@
 <div class="card">
   <h2>即時配信</h2>
   <p class="text-muted" style="margin: 0 0 14px">最新ニュースを<strong>収集→分析→配信</strong>まで一括実行します（本番の朝の処理と同じ）。シグナルがない場合は「該当なし」を送信します。完了まで数分かかることがあります。</p>
-  <form method="post" action="/admin/notify">
-    <button class="btn btn-success" type="submit">今すぐ収集して配信</button>
+  <form method="post" action="/admin/notify"
+        onsubmit="var b=this.querySelector('button'); b.disabled=true; b.textContent='実行中…';">
+    <button class="btn btn-success" type="submit"{% if pipeline_running %} disabled{% endif %}>
+      {% if pipeline_running %}実行中…{% else %}今すぐ収集して配信{% endif %}
+    </button>
   </form>
 </div>
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 import hmac
 import logging
 import os
+import threading
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
@@ -21,6 +22,11 @@ _PER_PAGE_OPTIONS = [20, 50, 100, 200]
 
 router = APIRouter(prefix="/admin")
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+
+# 即時配信パイプラインの多重実行ガード。
+# Render Free は単一プロセスなのでインメモリのフラグ＋ロックで十分。
+_pipeline_lock = threading.Lock()
+_pipeline_running = False
 
 
 def _is_authed(request: Request) -> bool:
@@ -111,6 +117,7 @@ async def dashboard(request: Request, date: str = None, msg: str = None):
         "stats": stats,
         "runs": runs,
         "msg": msg,
+        "pipeline_running": _pipeline_running,
     })
 
 
@@ -241,6 +248,17 @@ async def notify_now(request: Request, background: BackgroundTasks):
     if not _is_authed(request):
         return _login_redirect()
 
+    global _pipeline_running
+    # 多重実行ガード: 既に走っていれば起動せず案内だけ返す。
+    with _pipeline_lock:
+        if _pipeline_running:
+            logger.info("Immediate pipeline already running; skip duplicate trigger")
+            return RedirectResponse(
+                "/admin?msg=すでに実行中です。完了までお待ちください",
+                status_code=303,
+            )
+        _pipeline_running = True
+
     background.add_task(_run_full_pipeline)
     logger.info("Immediate pipeline (collect→analyze→deliver) triggered from admin")
 
@@ -256,10 +274,16 @@ def _run_full_pipeline() -> None:
     from monitor.agent import run as analyze
     from monitor.digest import run as deliver
 
-    for step, fn in (("collect", collect), ("analyze", analyze), ("deliver", deliver)):
-        try:
-            fn()
-        except Exception:
-            logger.exception("Immediate pipeline step '%s' failed", step)
-            if step == "deliver":
-                raise  # 配信失敗は致命的なので再送出（収集・分析の失敗は配信を妨げない）
+    global _pipeline_running
+    try:
+        for step, fn in (("collect", collect), ("analyze", analyze), ("deliver", deliver)):
+            try:
+                fn()
+            except Exception:
+                logger.exception("Immediate pipeline step '%s' failed", step)
+                if step == "deliver":
+                    raise  # 配信失敗は致命的なので再送出（収集・分析の失敗は配信を妨げない）
+    finally:
+        # 成否に関わらず必ずフラグを解放する（次回起動を許可）。
+        with _pipeline_lock:
+            _pipeline_running = False
