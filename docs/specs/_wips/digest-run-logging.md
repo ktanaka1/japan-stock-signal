@@ -44,8 +44,28 @@ CREATE INDEX IF NOT EXISTS idx_digest_runs_run_at ON digest_runs (run_at DESC);
 |--------|------|
 | `ok` | 全チャンク送信成功 |
 | `partial` | 一部チャンク失敗（受信者500件超で複数チャンクのとき） |
-| `error` | 例外で送信できず（LINE API 例外・トークン欠落等） |
-| `no_recipients` | 受信者ゼロでスキップ（障害ではない第三の状態） |
+| `error` | 例外で送信できず／全チャンク失敗（LINE API 4xx/5xx・例外・トークン欠落等） |
+| `no_recipients` | 受信者ゼロでスキップ（障害ではない第三の状態）。**受信者が全員不正IDで送信先ゼロになった場合もここに分類** |
+
+## LINE配信の堅牢化（2026-06-18 追加）
+
+本番で不正なuserId `U_test_dummy` が `recipients` に混入し、LINE multicast が `to[1] is invalid`
+で 400 を返し、**1件の不正IDで全受信者への配信が落ちる**事故が発生した。さらに失敗理由
+（HTTPステータス＋レスポンス本文）が `error_detail` に残らず Render ログ頼りだった。以下で恒久対策する。
+
+1. **登録時バリデーション** — `store/recipients.add()` は userId が `^U[0-9a-f]{32}$` に合致しない
+   ものを INSERT せず `logger.warning("invalid LINE userId rejected: ...")` のみ出す（例外は投げない
+   ＝webhookハンドラを巻き込まない）。判定は `recipients.is_valid_user_id()` に切り出し、notifier側でも再利用。
+2. **送信時フィルタ** — `notifier._multicast()` は送信前に同正規表現で受信者を絞り込み、不正IDを除外
+   してから multicast する。除外件数は `logger.warning` で出す。全員除外で送信先ゼロなら `(0,0)` を返す
+   →digest側で `no_recipients` 相当に扱う（誤って signals を notified にマークしない）。
+3. **失敗詳細の伝播** — `notifier` の戻り値を `SendResult(ok, error, error_details)`（NamedTuple）に拡張。
+   `error_details` は失敗チャンクごとの `"LINE {status}: {body}"` 文字列リスト。`digest.run()` は
+   これを集約し `_build_line_error_detail()` で件数サマリ＋実エラー本文を `digest_runs.error_detail` と
+   メールアラートに載せる。`SendResult` の先頭2要素は従来通り `(ok, error)` なので後方互換。
+
+テスト: `tests/test_line_robustness.py`（pytest非依存の自前ハーネス、`FORCE_LOCAL_DB=1 DB_PATH=/tmp/test.db`、
+`with TestClient(app)` でlifespan発火、httpx をモックして 200/400 両ケース検証）。10件全PASS。
 
 ## 実装範囲
 
@@ -53,7 +73,7 @@ CREATE INDEX IF NOT EXISTS idx_digest_runs_run_at ON digest_runs (run_at DESC);
 
 1. `migrations/005_digest_runs.sql` — 上記スキーマ
 2. `store/digest_runs.py` — `record()` / `get_recent(limit)`（`signals.py` と同じ `db.execute()` 直書きパターン、`notified_ids` はJSON）
-3. `monitor/notifier.py` — `send_text()` / `_multicast()` が `(ok_count, error_count)` を返す。DRY_RUN時 `(1,0)`、受信者なし `(0,0)`
+3. `monitor/notifier.py` — `send_text()` / `_multicast()` が `SendResult(ok, error, error_details)` を返す（先頭2要素は従来の `(ok, error)` 互換）。DRY_RUN時 `(1,0,[])`、受信者なし `(0,0,[])`。不正ID除外・失敗本文集約は「LINE配信の堅牢化」節を参照
 4. `monitor/mailer.py` — `send_digest_alert(error_detail, run_at_jst)` 追加。`REPORT_EMAIL` 未設定時はスキップ。件名 `[株シグナル] LINE配信エラー {run_at_jst}`
 5. `monitor/digest.py` — `run()` を `try/except/finally` 化。`finally` で `digest_runs.record()` を必ず実行、`error_detail` があれば `mailer.send_digest_alert()`。LINE失敗時はシグナルを通知済みにマークせず次回再送
 

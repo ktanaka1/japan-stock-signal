@@ -42,6 +42,8 @@ def run() -> None:
     # 集計変数
     total_ok: int = 0
     total_error: int = 0
+    line_error_details: List[str] = []  # LINEの実エラー本文（"LINE 400: {body}"）を集約
+    sent_attempted: bool = False        # 1通でも送信を試みたか（不正ID全除外の検知用）
     error_detail: Optional[str] = None
     notified_ids: List[int] = []
     status: str = "ok"
@@ -56,36 +58,51 @@ def run() -> None:
             # no_recipients は正常終了扱い。記録だけして終わる（finallyで記録する）
         elif not items:
             logger.info("No signals; sending zero-signal notice")
-            ok, err = send_text(_zero_signal_message(), recipients)
-            total_ok += ok
-            total_error += err
+            sent_attempted = True
+            res = send_text(_zero_signal_message(), recipients)
+            total_ok += res.ok
+            total_error += res.error
+            line_error_details.extend(res.error_details)
         else:
             messages = _build_messages(items)
             logger.info("Sending digest: %d signals in %d message(s)", len(items), len(messages))
+            sent_attempted = True
             for text in messages:
-                ok, err = send_text(text, recipients)
-                total_ok += ok
-                total_error += err
+                res = send_text(text, recipients)
+                total_ok += res.ok
+                total_error += res.error
+                line_error_details.extend(res.error_details)
 
-            if total_error == 0:
+            if total_error == 0 and total_ok > 0:
                 # 全送信成功時のみ通知済みにする
                 notified_ids = [s["id"] for s in items]
                 signals.mark_notified(notified_ids)
                 logger.info("Done: %d signals notified", len(items))
             else:
                 logger.warning(
-                    "LINE send partially failed: ok=%d error=%d; signals NOT marked notified",
+                    "LINE send not fully successful: ok=%d error=%d; signals NOT marked notified",
                     total_ok, total_error,
                 )
 
         # ステータス判定（no_recipients は上で設定済みなのでスキップ）
         if status != "no_recipients":
-            if total_error > 0 and total_ok > 0:
+            # 受信者はいたが全員が不正IDで除外され送信先ゼロになったケース。
+            # send_text/_multicast が (0,0) を返すため no_recipients 相当に扱う。
+            if sent_attempted and total_ok == 0 and total_error == 0:
+                status = "no_recipients"
+                logger.warning("All recipients were invalid; treated as no_recipients")
+            elif total_error > 0 and total_ok > 0:
                 status = "partial"
-                error_detail = f"LINE multicast: {total_ok} チャンク成功 / {total_error} チャンク失敗"
+                error_detail = _build_line_error_detail(
+                    f"LINE multicast: {total_ok} チャンク成功 / {total_error} チャンク失敗",
+                    line_error_details,
+                )
             elif total_error > 0:
                 status = "error"
-                error_detail = f"LINE multicast: 全 {total_error} チャンクが失敗"
+                error_detail = _build_line_error_detail(
+                    f"LINE multicast: 全 {total_error} チャンクが失敗",
+                    line_error_details,
+                )
 
     except Exception:
         status = "error"
@@ -106,6 +123,21 @@ def run() -> None:
     # LINE送信失敗時はメールアラート
     if error_detail:
         mailer.send_digest_alert(error_detail=error_detail, run_at_jst=run_at_jst)
+
+
+def _build_line_error_detail(summary: str, line_error_details: List[str]) -> str:
+    """件数サマリにLINEの実エラー本文（HTTPステータス＋レスポンス本文）を付与する。
+
+    Renderログを見なくても digest_runs.error_detail だけで原因が分かるようにする。
+    """
+    if not line_error_details:
+        return summary
+    # 同一エラーが複数チャンクで重複しがちなので一意化（順序は保持）
+    seen = []
+    for d in line_error_details:
+        if d not in seen:
+            seen.append(d)
+    return summary + "\n" + "\n".join(seen)
 
 
 def _header(count: int) -> str:
