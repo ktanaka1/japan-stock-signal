@@ -9,7 +9,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass, field
-from typing import List, Literal, Optional, Tuple
+from typing import Iterator, List, Literal, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -201,13 +201,18 @@ def analyze_batch(
     model: str | None = None,
     body_max_chars: int | None = None,
     body_batch_size: int | None = None,
-) -> List[Tuple[object, Optional[AnalysisResult]]]:
-    """記事リストをまとめて分析し、(article, result) のリストを返す。
+) -> "Iterator[List[Tuple[object, Optional[AnalysisResult]]]]":
+    """記事リストをチャンク単位でまとめて分析し、**1バッチ処理するたびに**
+    そのチャンクの結果 `list[(article, result)]` を yield するジェネレータ。
 
+    呼び出し側はチャンクが届くたびに保存・既読化できるため、途中で中断されても
+    処理済みバッチが確定する（逐次保存）。
     1回のLLM呼び出しで複数記事を処理してリクエスト数を抑える。
     本文付き（XBRL数値 or PDFテキスト）記事はトークン消費が大きいため、本文なし記事より
     小さいバッチサイズ（body_batch_size）で別チャンクとして処理する（仕様書§8）。
     結果が返らなかった記事は result=None になる。
+    連続失敗が max_failures に達したら、それ以上 yield せず return で打ち切る
+    （残りは未読のまま次回に回る）。
     """
     interval = batch_interval if batch_interval is not None else _BATCH_INTERVAL_SECONDS
     failures_limit = max_failures if max_failures is not None else _MAX_CONSECUTIVE_FAILURES
@@ -232,28 +237,28 @@ def analyze_batch(
         chunks.append(with_body[i : i + body_size])
 
     dry_run = os.getenv("DRY_RUN", "").lower() == "true"
-    results: List[Tuple[object, Optional[AnalysisResult]]] = []
     consecutive_failures = 0
     for idx, chunk in enumerate(chunks):
         if dry_run:
-            results.extend((a, _mock_analyze(a.title)) for a in chunk)
+            yield [(a, _mock_analyze(a.title)) for a in chunk]
             continue
         if idx > 0:
             time.sleep(interval)
         try:
-            results.extend(
-                _llm_analyze_batch(
-                    chunk,
-                    system_prompt=effective_batch_prompt,
-                    model=used_model,
-                    body_max_chars=max_chars,
-                )
+            chunk_results = _llm_analyze_batch(
+                chunk,
+                system_prompt=effective_batch_prompt,
+                model=used_model,
+                body_max_chars=max_chars,
             )
             consecutive_failures = 0
+            yield chunk_results
         except Exception:
             logger.exception("Batch analysis failed for articles %s", [a.id for a in chunk])
-            results.extend((a, None) for a in chunk)
             consecutive_failures += 1
+            # 失敗チャンクも (article, None) として yield する（呼び出し側で failed 集計）。
+            # None は保存・既読化されず未読のまま残り、次回再挑戦される。
+            yield [(a, None) for a in chunk]
             if consecutive_failures >= failures_limit:
                 remaining = sum(len(c) for c in chunks[idx + 1 :])
                 logger.error(
@@ -261,8 +266,7 @@ def analyze_batch(
                     consecutive_failures,
                     remaining,
                 )
-                break
-    return results
+                return
 
 
 def _mock_analyze(title: str) -> AnalysisResult:

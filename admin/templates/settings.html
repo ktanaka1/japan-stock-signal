@@ -70,6 +70,11 @@
         <input type="number" name="body_max_chars" value="{{ settings.body_max_chars }}"
           min="500" max="20000" step="500" style="width:100px; margin-top:6px">
       </div>
+      <div class="form-group">
+        <label>1回の処理上限（件）<br><small>1回の分析で処理する未読の最大件数。残りは次回に回す</small></label>
+        <input type="number" name="max_articles_per_run" value="{{ settings.max_articles_per_run }}"
+          min="1" max="2000" step="10" style="width:100px; margin-top:6px">
+      </div>
     </div>
   </div>
 

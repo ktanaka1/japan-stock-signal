@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from .db import execute
 from .models import Article
 
@@ -91,17 +93,23 @@ def existing_urls(urls: list[str]) -> set[str]:
     return found
 
 
-def get_unread() -> list[Article]:
-    """未読記事を取得日時の昇順で返す。"""
-    result = execute(
-        """
+def get_unread(limit: int | None = None) -> list[Article]:
+    """未読記事を取得日時の昇順で返す。
+
+    limit を指定すると古い順に最大 limit 件だけ返す（1回の実行で処理する件数の上限）。
+    """
+    sql = """
         SELECT id, title, body, url, fetched_at, is_read,
                security_code, xbrl_metrics, full_body, correction_reason, body_status
         FROM articles
         WHERE is_read = 0
         ORDER BY fetched_at ASC
-        """
-    )
+    """
+    params: tuple = ()
+    if limit is not None:
+        sql += " LIMIT ?"
+        params = (limit,)
+    result = execute(sql, params)
     return [
         Article(
             id=row["id"],

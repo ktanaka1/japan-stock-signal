@@ -63,6 +63,7 @@ DEFAULTS: dict[str, str] = {
     "rss_feeds": _RSS_FEEDS_DEFAULT,
     "batch_interval_seconds": "7",
     "max_consecutive_failures": "3",
+    "max_articles_per_run": "200",
     "body_max_chars": "4000",
     "body_fetch_triggers_numeric": _BODY_FETCH_TRIGGERS_NUMERIC_DEFAULT,
     "body_fetch_triggers_catalyst": _BODY_FETCH_TRIGGERS_CATALYST_DEFAULT,

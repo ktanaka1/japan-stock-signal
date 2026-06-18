@@ -218,6 +218,7 @@ async def settings_save(
     batch_interval_seconds: str = Form("7"),
     max_consecutive_failures: str = Form("3"),
     body_max_chars: str = Form("4000"),
+    max_articles_per_run: str = Form("200"),
 ):
     if not _is_authed(request):
         return _login_redirect()
@@ -238,6 +239,7 @@ async def settings_save(
         "batch_interval_seconds": batch_interval_seconds.strip() or "7",
         "max_consecutive_failures": max_consecutive_failures.strip() or "3",
         "body_max_chars": body_max_chars.strip() or "4000",
+        "max_articles_per_run": max_articles_per_run.strip() or "200",
     })
 
     return RedirectResponse("/admin/settings?msg=設定を保存しました", status_code=303)
