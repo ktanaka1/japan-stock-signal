@@ -146,8 +146,6 @@ async def articles_view(
     notified: str = "",
     price_min: str = "",
     price_max: str = "",
-    chg_min: str = "",
-    chg_max: str = "",
     page: int = 1,
     per_page: int = _PER_PAGE,
 ):
@@ -173,7 +171,6 @@ async def articles_view(
         available_years = [current_year] + available_years
     notified_filter = "yes" if notified == "yes" else None
     pmin, pmax = _to_float(price_min), _to_float(price_max)
-    cmin, cmax = _to_float(chg_min), _to_float(chg_max)
     rows, has_next = analyses.get_articles(
         date_str=date or None,
         year=year_filter,
@@ -182,8 +179,6 @@ async def articles_view(
         notified=notified_filter,
         price_min=pmin,
         price_max=pmax,
-        chg_min=cmin,
-        chg_max=cmax,
         limit=per_page,
         offset=offset,
     )
@@ -195,8 +190,6 @@ async def articles_view(
         notified=notified_filter,
         price_min=pmin,
         price_max=pmax,
-        chg_min=cmin,
-        chg_max=cmax,
     )
     # 表示レンジ（rowsが0件なら0〜0。範囲外ページでもendが暴走しないよう保護）
     start = offset + 1 if rows else 0
@@ -215,8 +208,6 @@ async def articles_view(
         "notified": notified,
         "price_min": price_min,
         "price_max": price_max,
-        "chg_min": chg_min,
-        "chg_max": chg_max,
         "page": page,
         "has_next": has_next,
         "per_page": per_page,

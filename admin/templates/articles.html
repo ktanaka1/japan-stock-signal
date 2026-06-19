@@ -9,15 +9,10 @@
 {% set qs_nopp = qs_nopp ~ ('&notified=' ~ notified if notified else '') %}
 {% set qs_nopp = qs_nopp ~ ('&price_min=' ~ price_min if price_min else '') %}
 {% set qs_nopp = qs_nopp ~ ('&price_max=' ~ price_max if price_max else '') %}
-{% set qs_nopp = qs_nopp ~ ('&chg_min=' ~ chg_min if chg_min else '') %}
-{% set qs_nopp = qs_nopp ~ ('&chg_max=' ~ chg_max if chg_max else '') %}
 {% set qs = qs_nopp ~ '&per_page=' ~ per_page %}
 {% macro price_str(s) %}
-{%- if s.close|default(none) is not none -%}
-  {{ '{:,.0f}'.format(s.close) }}円
-  {%- if s.change_pct|default(none) is not none %} ({{ '%+.1f'|format(s.change_pct) }}%){% endif -%}
-  {%- if s.volume|default(none) is not none %} {% if s.volume >= 10000 %}{{ '{:,.0f}'.format(s.volume / 10000) }}万株{% else %}{{ '{:,}'.format(s.volume) }}株{% endif %}{% endif -%}
-{%- endif -%}
+{# 値ごろ感の終値のみ表示。前日比%・出来高は旬直前のノイズのため出さない #}
+{%- if s.close|default(none) is not none -%}{{ '{:,.0f}'.format(s.close) }}円{%- endif -%}
 {% endmacro %}
 {% macro pager() %}
 {% set total_pages = ((total + per_page - 1) // per_page) if total else 1 %}
@@ -86,17 +81,11 @@
         <option value="">通知：すべて</option>
         <option value="yes" {% if notified == 'yes' %}selected{% endif %}>LINE配信済みのみ</option>
       </select>
-      <span class="range-filter" title="終値（円）の範囲で絞り込み">株価
+      <span class="range-filter" title="終値（円・値ごろ）の範囲で絞り込み">株価
         <input type="text" name="price_min" value="{{ price_min }}" placeholder="下限" inputmode="numeric"
           onkeydown="if(event.key==='Enter'){event.preventDefault(); this.form.submit();}" onchange="this.form.submit()" style="width:70px">〜
         <input type="text" name="price_max" value="{{ price_max }}" placeholder="上限" inputmode="numeric"
           onkeydown="if(event.key==='Enter'){event.preventDefault(); this.form.submit();}" onchange="this.form.submit()" style="width:70px">円
-      </span>
-      <span class="range-filter" title="前日比%の範囲で絞り込み">前日比
-        <input type="text" name="chg_min" value="{{ chg_min }}" placeholder="下限" inputmode="numeric"
-          onkeydown="if(event.key==='Enter'){event.preventDefault(); this.form.submit();}" onchange="this.form.submit()" style="width:60px">〜
-        <input type="text" name="chg_max" value="{{ chg_max }}" placeholder="上限" inputmode="numeric"
-          onkeydown="if(event.key==='Enter'){event.preventDefault(); this.form.submit();}" onchange="this.form.submit()" style="width:60px">%
       </span>
     </form>
     <span class="text-muted count">
@@ -145,8 +134,7 @@
             <div style="margin-bottom:3px">
               {{ s.name }}<br><span class="text-muted">{{ s.code }}</span>
               {% set p = price_str(s)|trim %}
-              {% set chg = s.change_pct|default(none) %}
-              {% if p %}<br><span class="{{ 'c-pos' if (chg is not none and chg > 0) else ('c-neg' if (chg is not none and chg < 0) else 'text-muted') }}" style="font-size:0.8rem">📊 {{ p }}</span>{% endif %}
+              {% if p %}<br><span class="text-muted" style="font-size:0.8rem">📊 {{ p }}</span>{% endif %}
             </div>
           {% endfor %}
         </td>

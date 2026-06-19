@@ -79,26 +79,14 @@ def enrich(stocks: List[dict]) -> None:
 def format_price(stock: dict) -> str:
     """enrich 済みの銘柄dictを配信向けの株価文字列に整形する。
 
-    価格が無ければ空文字を返す。例: "2,850円 (+1.8%) 出来高 123万株"
+    値ごろ感の判断に使う「直近終値（円）」のみを返す。価格が無ければ空文字。
+    前日比%・出来高は『旬になる直前の値＝ノイズ』のため表示しない（インパクトスコアに全振り）。
+    例: "2,850円"
     """
     close = stock.get("close")
     if close is None:
         return ""
-    parts = [f"{close:,.0f}円"]
-    chg = stock.get("change_pct")
-    if chg is not None:
-        parts.append(f"({chg:+.1f}%)")
-    vol = stock.get("volume")
-    if vol is not None:
-        parts.append(f"出来高 {_format_volume(vol)}")
-    return " ".join(parts)
-
-
-def _format_volume(vol: int) -> str:
-    """出来高を読みやすい単位（万株）に整形する。1万株未満はそのまま株表記。"""
-    if vol >= 10000:
-        return f"{vol / 10000:,.0f}万株"
-    return f"{vol:,}株"
+    return f"{close:,.0f}円"
 
 
 def get_quote_asof(code: str, date_str: str) -> Optional[Quote]:
