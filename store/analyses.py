@@ -13,11 +13,12 @@ def save(
     reason: str,
     stocks: list,
     became_signal: bool,
+    impact: int = 3,
 ) -> None:
     execute(
         "INSERT OR IGNORE INTO article_analyses"
-        " (article_id, sentiment, summary, reason, stocks, became_signal)"
-        " VALUES (?, ?, ?, ?, ?, ?)",
+        " (article_id, sentiment, summary, reason, stocks, became_signal, impact)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?)",
         (
             article_id,
             sentiment,
@@ -25,6 +26,7 @@ def save(
             reason,
             json.dumps(stocks, ensure_ascii=False),
             1 if became_signal else 0,
+            impact,
         ),
     )
 
@@ -139,6 +141,7 @@ def get_articles(
             aa.reason,
             aa.stocks,
             aa.became_signal,
+            aa.impact,
             s.notified_at
         FROM articles a
         LEFT JOIN article_analyses aa ON a.id = aa.article_id

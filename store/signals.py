@@ -6,12 +6,13 @@ import json
 from .db import execute
 
 
-def add(article_id: int, sentiment: str, summary: str, stocks: list, url: str) -> None:
-    """シグナルを登録する。同一記事の重複は無視。"""
+def add(article_id: int, sentiment: str, summary: str, stocks: list, url: str,
+        impact: int = 3) -> None:
+    """シグナルを登録する。同一記事の重複は無視。impact は旬度(1〜5)。"""
     execute(
-        "INSERT OR IGNORE INTO signals (article_id, sentiment, summary, stocks, url)"
-        " VALUES (?, ?, ?, ?, ?)",
-        (article_id, sentiment, summary, json.dumps(stocks, ensure_ascii=False), url),
+        "INSERT OR IGNORE INTO signals (article_id, sentiment, summary, stocks, url, impact)"
+        " VALUES (?, ?, ?, ?, ?, ?)",
+        (article_id, sentiment, summary, json.dumps(stocks, ensure_ascii=False), url, impact),
     )
 
 
@@ -19,7 +20,7 @@ def get_unnotified() -> list[dict]:
     """未通知のシグナルを古い順に返す。"""
     rows = execute(
         """
-        SELECT id, article_id, sentiment, summary, stocks, url, created_at
+        SELECT id, article_id, sentiment, summary, stocks, url, impact, created_at
         FROM signals
         WHERE notified_at IS NULL
         ORDER BY id ASC
@@ -37,7 +38,7 @@ def get_by_ids(signal_ids: list[int]) -> list[dict]:
     placeholders = ", ".join(["?"] * len(signal_ids))
     rows = execute(
         f"""
-        SELECT id, article_id, sentiment, summary, stocks, url, created_at
+        SELECT id, article_id, sentiment, summary, stocks, url, impact, created_at
         FROM signals
         WHERE id IN ({placeholders})
         ORDER BY id ASC

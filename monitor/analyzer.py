@@ -45,11 +45,38 @@ _SYSTEM_PROMPT = (
     "（または前期実績）を見つけ、数値を比較して方向を判定せよ。"
 )
 
+# インパクトスコアの判定ルール。stored prompt（settings）に依存せず常に付与するため、
+# analyze 呼び出し時にプロンプト末尾へ必ず連結する（柱3: 旬の事前予測）。
+_IMPACT_INSTRUCTION = (
+    "\n\n【インパクトスコア impact（1〜5・必須）】\n"
+    "各記事に『翌営業日に出来高が急増し株価が大きく動く可能性（＝デイトレで“旬”になる度合い）』を"
+    "1〜5の整数で必ず付けよ。方向(ポジ/ネガ)とは独立に、市場へのサプライズの大きさで判定する。\n"
+    "5（最上級・ストップ高/安候補）＝劇的なサプライズ。長年の赤字からの黒字転換、無配からの大幅復配、"
+    "市場予想(コンセンサス)を絶望的に裏切る超大幅な上方/下方修正、MBO・買収・経営権異動など。"
+    "翌日の出来高が数十倍に爆発するレベル。\n"
+    "4（本命・大注目）＝通常の明確な上方/下方修正、ポジティブなバイオ臨床試験の進展、大手企業との"
+    "新規大口契約など、個別カタリストとして十分な材料。\n"
+    "3（好悪材料だが普通）＝順当な決算、想定の範囲内の進捗。\n"
+    "2（軽微）＝小さな材料。\n"
+    "1（ノイズ・旬でない）＝超大型株のマクロ連動ニュース（トヨタやメガバンク等の円安メリット・定例開示）、"
+    "または既に織り込み済みの軽微な材料。\n"
+    "『業績予想の修正』でも事前予想どおりなら低スコア、想定外の大幅なら高スコアとせよ。"
+    "neutral でも数値の大きさに応じてスコアを付けること。"
+)
+
 _BATCH_SYSTEM_PROMPT = (
     _SYSTEM_PROMPT
     + "\n複数の記事が番号付きで与えられます。"
     "記事ごとに1つの結果を返し、index フィールドに記事番号をそのまま入れてください。"
 )
+
+
+def _clamp_impact(value) -> int:
+    """impact を 1〜5 の整数に丸める。未指定・不正は 3（通常）にする。"""
+    try:
+        return max(1, min(5, int(value)))
+    except (TypeError, ValueError):
+        return 3
 
 # 本文（PDF/XBRLテキスト）をLLMに渡す際の文字数上限の既定値（settingsで上書き可能）。
 _BODY_MAX_CHARS = 4000
@@ -78,6 +105,7 @@ class AnalysisResult:
     summary: str
     reason: str
     stocks: List[dict]  # [{"name": "日本製鉄", "code": "5401"}]
+    impact: int = 3     # 1〜5: 翌日の出来高爆発＝旬になる可能性（サプライズ度）
 
 
 # basis（xbrl_metrics）→ 人間可読の開示種別ラベル
@@ -224,6 +252,7 @@ def analyze_batch(
         prompt
         + "\n複数の記事が番号付きで与えられます。"
         "記事ごとに1つの結果を返し、index フィールドに記事番号をそのまま入れてください。"
+        + _IMPACT_INSTRUCTION  # stored prompt に依存せず常に付与する
     )
 
     # 本文付き／本文なしで使うバッチサイズが違うため、チャンク列を先に組む。
@@ -275,6 +304,7 @@ def _mock_analyze(title: str) -> AnalysisResult:
         summary=f"[DRY RUN] {title[:60]}",
         reason="[DRY RUN] モック判定のため根拠なし。",
         stocks=[{"name": "サンプル株式会社", "code": "9999"}],
+        impact=4,
     )
 
 
@@ -293,6 +323,7 @@ def _llm_analyze(title: str, body: str, _retry: int = 3) -> AnalysisResult:
         summary: str
         reason: str
         stocks: List[Stock]
+        impact: int  # 1〜5: 旬になる可能性（サプライズ度）
 
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
     for attempt in range(_retry):
@@ -301,7 +332,7 @@ def _llm_analyze(title: str, body: str, _retry: int = 3) -> AnalysisResult:
                 model=_MODEL,
                 contents=f"タイトル：{title}\n\n本文：{body[:800]}",
                 config=types.GenerateContentConfig(
-                    system_instruction=_SYSTEM_PROMPT,
+                    system_instruction=_SYSTEM_PROMPT + _IMPACT_INSTRUCTION,
                     response_mime_type="application/json",
                     response_schema=Analysis,
                 ),
@@ -312,6 +343,7 @@ def _llm_analyze(title: str, body: str, _retry: int = 3) -> AnalysisResult:
                 summary=result.summary,
                 reason=result.reason,
                 stocks=[{"name": s.name, "code": s.code} for s in result.stocks],
+                impact=_clamp_impact(getattr(result, "impact", 3)),
             )
         except Exception as e:
             if attempt < _retry - 1 and ("503" in str(e) or "429" in str(e)):
@@ -343,6 +375,7 @@ def _llm_analyze_batch(
         summary: str
         reason: str
         stocks: List[Stock]
+        impact: int  # 1〜5: 旬になる可能性（サプライズ度）
 
     class BatchAnalysis(BaseModel):
         items: List[Item]
@@ -380,6 +413,7 @@ def _llm_analyze_batch(
                             summary=item.summary,
                             reason=item.reason,
                             stocks=[{"name": s.name, "code": s.code} for s in item.stocks],
+                            impact=_clamp_impact(getattr(item, "impact", 3)),
                         ),
                     )
                 )

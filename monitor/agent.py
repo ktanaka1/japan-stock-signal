@@ -98,7 +98,8 @@ def run() -> None:
                 # 取得失敗は quotes 側で握りつぶされ、価格なしのまま進む。
                 quotes.enrich(result.stocks)
                 signals.add(
-                    article.id, result.sentiment, result.summary, result.stocks, article.url
+                    article.id, result.sentiment, result.summary, result.stocks, article.url,
+                    impact=result.impact,
                 )
                 signal_article_ids.add(article.id)
                 signal_count += 1
@@ -117,6 +118,7 @@ def run() -> None:
                 result.reason,
                 result.stocks,
                 is_signal,
+                impact=result.impact,
             )
             processed_ids.append(article.id)
         # バッチ完了ごとに既読を確定する（次回はこの分を除いた未読から再開）。
