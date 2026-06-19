@@ -6,6 +6,7 @@
 {% set qs_nopp = qs_nopp ~ '&year=' ~ year %}
 {% set qs_nopp = qs_nopp ~ ('&sentiment=' ~ sentiment if sentiment else '') %}
 {% set qs_nopp = qs_nopp ~ ('&code=' ~ code if code else '') %}
+{% set qs_nopp = qs_nopp ~ ('&notified=' ~ notified if notified else '') %}
 {% set qs = qs_nopp ~ '&per_page=' ~ per_page %}
 {% macro pager() %}
 {% set total_pages = ((total + per_page - 1) // per_page) if total else 1 %}
@@ -70,6 +71,10 @@
       <input type="text" name="code" value="{{ code }}" placeholder="銘柄コード" inputmode="numeric"
         onkeydown="if(event.key==='Enter'){event.preventDefault(); this.form.submit();}"
         onchange="this.form.submit()" style="width:110px" title="銘柄コードで絞り込み（コード入力後Enter、前方一致）">
+      <select name="notified" onchange="this.form.submit()" title="LINE配信の有無で絞り込み">
+        <option value="">通知：すべて</option>
+        <option value="yes" {% if notified == 'yes' %}selected{% endif %}>LINE配信済みのみ</option>
+      </select>
     </form>
     <span class="text-muted count">
       {% if not total %}0件{% elif articles %}{{ start }}〜{{ end }} 件目 / {{ total }}件{% else %}全{{ total }}件{% endif %}

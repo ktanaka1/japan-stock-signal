@@ -132,6 +132,7 @@ async def articles_view(
     year: str = "",
     sentiment: str = "",
     code: str = "",
+    notified: str = "",
     page: int = 1,
     per_page: int = _PER_PAGE,
 ):
@@ -155,11 +156,13 @@ async def articles_view(
     available_years = analyses.get_available_years()
     if current_year not in available_years:
         available_years = [current_year] + available_years
+    notified_filter = "yes" if notified == "yes" else None
     rows, has_next = analyses.get_articles(
         date_str=date or None,
         year=year_filter,
         sentiment=sentiment or None,
         code=code or None,
+        notified=notified_filter,
         limit=per_page,
         offset=offset,
     )
@@ -168,6 +171,7 @@ async def articles_view(
         year=year_filter,
         sentiment=sentiment or None,
         code=code or None,
+        notified=notified_filter,
     )
     # 表示レンジ（rowsが0件なら0〜0。範囲外ページでもendが暴走しないよう保護）
     start = offset + 1 if rows else 0
@@ -183,6 +187,7 @@ async def articles_view(
         "available_years": available_years,
         "sentiment": sentiment,
         "code": code,
+        "notified": notified,
         "page": page,
         "has_next": has_next,
         "per_page": per_page,

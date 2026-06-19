@@ -43,11 +43,13 @@ def _build_article_filter(
     year: str | None,
     sentiment: str | None,
     code: str | None,
+    notified: str | None = None,
 ) -> tuple[str, list]:
     """記事一覧のフィルタから WHERE句と paramsを組み立てる。
 
     get_articles / count_articles で共通利用し、件数と一覧の条件ズレを防ぐ。
-    （JOIN は a=articles / aa=article_analyses 前提）
+    （JOIN は a=articles / aa=article_analyses / s=signals 前提）
+    notified="yes" で LINE配信済み（s.notified_at IS NOT NULL）のみに絞る。
     """
     where = []
     params: list = []
@@ -69,6 +71,8 @@ def _build_article_filter(
             "WHERE json_extract(je.value, '$.code') LIKE ?)"
         )
         params.append(code + "%")
+    if notified == "yes":
+        where.append("s.notified_at IS NOT NULL")
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
     return where_sql, params
 
@@ -78,16 +82,18 @@ def get_articles(
     year: str | None = None,
     sentiment: str | None = None,
     code: str | None = None,
+    notified: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[dict], bool]:
     """記事を分析結果・シグナル情報付きで新しい順に返す。未分析記事も含む。
 
-    date_str / year / sentiment / code は任意のフィルタ。sentiment="none" は未分析記事のみ。
+    date_str / year / sentiment / code / notified は任意のフィルタ。sentiment="none" は未分析記事のみ。
     year は対象年(JST)。code は銘柄コードの前方一致（stocks JSON内のいずれかのcodeにマッチ）。
+    notified="yes" は LINE配信済みのみ。
     次ページの有無を判定するため limit+1 件取得し、(rows[:limit], has_next) を返す。
     """
-    where_sql, params = _build_article_filter(date_str, year, sentiment, code)
+    where_sql, params = _build_article_filter(date_str, year, sentiment, code, notified)
 
     sql = f"""
         SELECT
@@ -124,12 +130,13 @@ def count_articles(
     year: str | None = None,
     sentiment: str | None = None,
     code: str | None = None,
+    notified: str | None = None,
 ) -> int:
     """get_articles と同一フィルタに一致する記事の総件数を返す。
 
     WHERE句は get_articles と共通の _build_article_filter を使うため条件は完全一致。
     """
-    where_sql, params = _build_article_filter(date_str, year, sentiment, code)
+    where_sql, params = _build_article_filter(date_str, year, sentiment, code, notified)
     sql = f"""
         SELECT COUNT(*) AS cnt
         FROM articles a
