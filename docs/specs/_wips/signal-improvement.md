@@ -47,7 +47,14 @@
 - 閾値は仮置き。検証データ（タムロン+26%・サムコ+20%等が寄り天化したか）で調整する。
 - 当面は管理画面の銘柄行に「ギャップ%」と警戒バッジを出す簡易版から始めるのが低コスト。
 
-### 柱3: インパクトスコア 1〜5（攻撃）— 旬の事前予測【本命】
+### 柱3: インパクトスコア 1〜5（攻撃）— 旬の事前予測【本命・実装済み 2026-06-19】
+
+> **実装済み**: `migrations/007_signal_impact.sql`（signals/article_analyses に impact 列）、
+> `monitor/analyzer.py`（_IMPACT_INSTRUCTION・スキーマに impact 追加・_clamp_impact）、
+> `monitor/agent.py`（保存）、`monitor/digest.py`（min_impact_for_notify で絞り込み・🔥表示）、
+> `store/settings.py`（min_impact_for_notify 既定4）、LINE/メール/管理画面に🔥スコア表示。
+> 実Gemini検証で 黒字転換＆復配=5 / バイオ第3相=4 / 計画どおり決算=3 / 大型株マクロ=2 とルブリック通り分化を確認。
+> 残: 効果測定（verify_signals 再実行）と閾値チューニング。
 
 **目的**: 方向（ポジ/ネガ）に加え「翌日の出来高爆発＝旬になる可能性」を1〜5で評価し、高スコアのみ最優先通知する。
 
