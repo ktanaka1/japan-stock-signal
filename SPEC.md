@@ -72,28 +72,52 @@ flowchart TD
 ## 通知フォーマット（デイリーダイジェスト）
 
 ```
-📋 6/12(金) 朝のシグナル 8件
+📋 6/12(金) 朝のシグナル 2件
 
-✅ トヨタ自動車(7203)
-　通期営業利益を上方修正
+✅ サムコ(6387) 🔥5
+　📊 4,460円
+　通期営業利益を大幅上方修正、市場予想を超過
 　https://...
 
-❌ ソニーG(6758)
-　主力事業で減損計上へ
+✅ TKP(3479) 🔥4
+　📊 1,250円
+　大手企業との新規大口契約を発表
 　https://...
 ```
 
-- 1項目 = 判定アイコン + 銘柄名(証券コード) + 1行要約 + 記事リンク
+- 1項目 = 判定アイコン + 銘柄名(証券コード) + **🔥インパクトスコア** + 終値(値ごろ) + 1行要約 + 記事リンク
+- **インパクト降順**に並べる（先頭が“今日の主役候補”）。詳細は下記「シグナルの選別」参照
 - 銘柄が特定できないニュースは載せない
+- **前日比%・出来高は載せない**（“旬になる直前の値＝ノイズ”のため。値ごろ感の終値のみ）
 - LINEの1通上限（5,000字）を超える場合は複数通に分割
 - LINE無料枠は月200通。1日1通運用なので余裕（受信者が増えても 受信者数×約21通/月）
+
+## シグナルの選別（デイトレ最適化）
+
+デイトレで「実際に獲れる旬の銘柄」だけを届けるための選別ロジック。設計判断の経緯は
+`docs/architecture-decisions/` と git 履歴、効果測定は `scripts/verify_signals.py` 参照。
+
+- **インパクトスコア(1〜5)**: 方向(ポジ/ネガ)とは独立に「翌営業日の出来高爆発＝旬になる可能性」を
+  LLMが評価（`monitor/analyzer.py` の `_IMPACT_INSTRUCTION`、スキーマに `impact`）。
+  5=黒字転換/復配/MBO/超大幅修正、4=明確な上方修正・臨床進展・大口契約、3=順当、1=大型株のマクロ連動・織込済。
+  `settings.min_impact_for_notify`（既定4）以上のみ配信。未満は `notified_at` を打たず未配信のまま残す。
+- **大型株フィルタ**: TOPIX Core30相当（`monitor/large_cap.py`）の全銘柄が大型のシグナルは配信除外
+  （`settings.exclude_large_cap` 既定true）。マクロ連動で動かないノイズを弾く。
+- **株価付与**: Yahoo Finance(chart API・httpx直叩き・新規依存なし)で生成時点の確定終値を `stocks` JSON に埋め込む。
+  場中(15:10 JST前)は当日の未確定バーを除外し前営業日終値を採る。値ごろ感の表示と価格帯フィルタに使う。
+- 効果測定基準（2026-06-10〜18・反応日）: 中小型ポジの値幅5%超ヒット率 全体28% → インパクト4〜5で**36%**。
+
+> 補足: 場中のリアルタイム監視（ギャップ率・出来高ランキング）はSBI等の証券アプリに任せる。本システムの役割は
+> **9:00オープン前に“今日の主役候補”を数銘柄に絞る**ことに限定する（場中の追走通知は実装しない方針）。
 
 ## ストア（Cloudflare D1）
 
 | テーブル | 役割 | 主なカラム |
 |---|---|---|
 | articles | 収集した記事 | title, body, url(UNIQUE), fetched_at, is_read |
-| signals | 検出したシグナル | article_id(UNIQUE), sentiment, summary, stocks(JSON), url, created_at, notified_at |
+| signals | 検出したシグナル | article_id(UNIQUE), sentiment, summary, stocks(JSON・終値等を含む), url, impact(1〜5), created_at, notified_at |
+| article_analyses | 分析結果（一覧/絞り込み用） | article_id(UNIQUE), sentiment, summary, reason, stocks(JSON), became_signal, impact |
+| digest_runs | 配信実行ログ | status, signal_count, line_ok/error, error_detail, notified_ids(JSON), run_at |
 | recipients | LINE受信者 | line_user_id(UNIQUE), followed_at |
 
 - D1はSQLite互換。store層は `CLOUDFLARE_*` 環境変数があればD1 REST API、なければローカルSQLite（開発用）
@@ -118,7 +142,10 @@ flowchart TD
 
 ## 将来の拡張候補（未実装）
 
-- [ ] ハイブリッド通知: TOB・業績修正など影響度最大級のシグナルだけ場中に即時通知
-- [ ] 影響度スコア（1〜5）をLLMに出させ、ダイジェスト内を重要度順に並べる
+- [ ] X(旧Twitter)の株クラ等のセンチメント指標を拾うパイプライン追加
+- [ ] エラー通知の強化・Renderコールドスタート対策（インフラ堅牢化）
 - [ ] TDnetタイトルのキーワード事前フィルタでLLMコストをさらに削減
 - [ ] 銘柄ごとのグルーピング、株価チャートへのリンク付与
+
+> 実装済み: 影響度スコア(1〜5)による重要度順配信＝「シグナルの選別」へ統合。
+> 破棄: 場中の即時/追走通知（証券アプリの劣化版になり特別気配の判定も困難なため。同節の補足参照）。
