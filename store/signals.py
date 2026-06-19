@@ -30,6 +30,25 @@ def get_unnotified() -> list[dict]:
     return rows
 
 
+def get_by_ids(signal_ids: list[int]) -> list[dict]:
+    """指定IDのシグナルをID昇順で返す（配信ログから内容を復元する用途）。"""
+    if not signal_ids:
+        return []
+    placeholders = ", ".join(["?"] * len(signal_ids))
+    rows = execute(
+        f"""
+        SELECT id, article_id, sentiment, summary, stocks, url, created_at
+        FROM signals
+        WHERE id IN ({placeholders})
+        ORDER BY id ASC
+        """,
+        tuple(signal_ids),
+    ).rows
+    for row in rows:
+        row["stocks"] = json.loads(row["stocks"])
+    return rows
+
+
 def mark_notified(signal_ids: list[int]) -> None:
     """シグナルを通知済みにする。"""
     chunk_size = 50

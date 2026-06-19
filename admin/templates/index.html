@@ -93,7 +93,27 @@
             {% elif run.status == "no_recipients" %}<span class="badge b-none">no_recipients</span>
             {% else %}<span class="badge b-none">{{ run.status }}</span>{% endif %}
           </td>
-          <td>{{ run.signal_count }}</td>
+          <td>
+            {% if run.signals %}
+            <details>
+              <summary style="cursor:pointer">{{ run.signal_count }}</summary>
+              <div class="run-signals">
+                {% for s in run.signals %}
+                <div class="run-signal">
+                  <span class="badge {{ 'b-pos' if s.sentiment == 'positive' else 'b-neg' }}">
+                    {{ '✅' if s.sentiment == 'positive' else '❌' }}
+                    {{ s.stocks | map(attribute='name') | join('、') }}
+                  </span>
+                  <div>{{ s.summary }}</div>
+                  <a href="{{ s.url }}" target="_blank" rel="noopener" class="text-muted">{{ s.url }}</a>
+                </div>
+                {% endfor %}
+              </div>
+            </details>
+            {% else %}
+            {{ run.signal_count }}
+            {% endif %}
+          </td>
           <td>{{ run.line_ok }} / {{ run.line_error }}</td>
           <td>
             {% if run.error_detail %}

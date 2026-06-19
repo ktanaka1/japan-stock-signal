@@ -105,12 +105,14 @@ async def dashboard(request: Request, msg: str = None, stats_page: int = 0):
 
     stats_page = max(0, stats_page)
 
-    from store import analyses, digest_runs
+    from store import analyses, digest_runs, signals
     daily_stats, has_older = analyses.get_stats_recent_days(_DASHBOARD_DAYS, page=stats_page)
 
     runs = digest_runs.get_recent(30)
     for run in runs:
         run["run_at_jst"] = _to_jst_time(run.get("run_at", "") or "")
+        # 配信したシグナルの内容（銘柄・要約・URL）を復元して展開表示できるようにする
+        run["signals"] = signals.get_by_ids(run.get("notified_ids") or [])
 
     return templates.TemplateResponse("index.html", {
         "request": request,
