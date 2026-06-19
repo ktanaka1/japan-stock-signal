@@ -7,7 +7,18 @@
 {% set qs_nopp = qs_nopp ~ ('&sentiment=' ~ sentiment if sentiment else '') %}
 {% set qs_nopp = qs_nopp ~ ('&code=' ~ code if code else '') %}
 {% set qs_nopp = qs_nopp ~ ('&notified=' ~ notified if notified else '') %}
+{% set qs_nopp = qs_nopp ~ ('&price_min=' ~ price_min if price_min else '') %}
+{% set qs_nopp = qs_nopp ~ ('&price_max=' ~ price_max if price_max else '') %}
+{% set qs_nopp = qs_nopp ~ ('&chg_min=' ~ chg_min if chg_min else '') %}
+{% set qs_nopp = qs_nopp ~ ('&chg_max=' ~ chg_max if chg_max else '') %}
 {% set qs = qs_nopp ~ '&per_page=' ~ per_page %}
+{% macro price_str(s) %}
+{%- if s.close is not none -%}
+  {{ '{:,.0f}'.format(s.close) }}円
+  {%- if s.change_pct is not none %} ({{ '%+.1f'|format(s.change_pct) }}%){% endif -%}
+  {%- if s.volume is not none %} {% if s.volume >= 10000 %}{{ '{:,.0f}'.format(s.volume / 10000) }}万株{% else %}{{ '{:,}'.format(s.volume) }}株{% endif %}{% endif -%}
+{%- endif -%}
+{% endmacro %}
 {% macro pager() %}
 {% set total_pages = ((total + per_page - 1) // per_page) if total else 1 %}
 {% set start = page - 2 if page - 2 > 1 else 1 %}
@@ -75,6 +86,18 @@
         <option value="">通知：すべて</option>
         <option value="yes" {% if notified == 'yes' %}selected{% endif %}>LINE配信済みのみ</option>
       </select>
+      <span class="range-filter" title="終値（円）の範囲で絞り込み">株価
+        <input type="text" name="price_min" value="{{ price_min }}" placeholder="下限" inputmode="numeric"
+          onkeydown="if(event.key==='Enter'){event.preventDefault(); this.form.submit();}" onchange="this.form.submit()" style="width:70px">〜
+        <input type="text" name="price_max" value="{{ price_max }}" placeholder="上限" inputmode="numeric"
+          onkeydown="if(event.key==='Enter'){event.preventDefault(); this.form.submit();}" onchange="this.form.submit()" style="width:70px">円
+      </span>
+      <span class="range-filter" title="前日比%の範囲で絞り込み">前日比
+        <input type="text" name="chg_min" value="{{ chg_min }}" placeholder="下限" inputmode="numeric"
+          onkeydown="if(event.key==='Enter'){event.preventDefault(); this.form.submit();}" onchange="this.form.submit()" style="width:60px">〜
+        <input type="text" name="chg_max" value="{{ chg_max }}" placeholder="上限" inputmode="numeric"
+          onkeydown="if(event.key==='Enter'){event.preventDefault(); this.form.submit();}" onchange="this.form.submit()" style="width:60px">%
+      </span>
     </form>
     <span class="text-muted count">
       {% if not total %}0件{% elif articles %}{{ start }}〜{{ end }} 件目 / {{ total }}件{% else %}全{{ total }}件{% endif %}
@@ -95,7 +118,7 @@
         <th>銘柄</th>
         <th>要約 / 判断根拠</th>
         <th>シグナル</th>
-        <th>通知</th>
+        <th>LINE配信済み</th>
         <th>取得時刻</th>
       </tr>
     </thead>
@@ -118,7 +141,11 @@
         </td>
         <td style="font-size:0.82rem; white-space:nowrap">
           {% for s in a.stocks %}
-            <div>{{ s.name }}<br><span class="text-muted">{{ s.code }}</span></div>
+            <div style="margin-bottom:3px">
+              {{ s.name }}<br><span class="text-muted">{{ s.code }}</span>
+              {% set p = price_str(s)|trim %}
+              {% if p %}<br><span class="{{ 'c-pos' if (s.change_pct is not none and s.change_pct > 0) else ('c-neg' if (s.change_pct is not none and s.change_pct < 0) else 'text-muted') }}" style="font-size:0.8rem">📊 {{ p }}</span>{% endif %}
+            </div>
           {% endfor %}
         </td>
         <td style="max-width:340px">
