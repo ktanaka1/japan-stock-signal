@@ -189,7 +189,7 @@ def test_digest_run_success_marks_notified():
     os.environ.pop("DRY_RUN", None)
 
     marked = {}
-    one_signal = [{"id": 7, "sentiment": "positive", "summary": "材料",
+    one_signal = [{"id": 7, "sentiment": "positive", "summary": "材料", "impact": 5,
                    "stocks": [{"code": "1", "name": "A"}], "url": "u"}]
 
     with mock.patch.object(digest.signals, "get_unnotified", lambda: one_signal), \

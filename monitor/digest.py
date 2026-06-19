@@ -15,6 +15,7 @@ from typing import List, Optional
 from store.db import migrate
 from store import signals
 from store import digest_runs
+from store import settings as cfg
 from store.recipients import get_all as get_recipients
 from monitor.notifier import send_text
 from monitor import mailer
@@ -50,15 +51,26 @@ def run() -> None:
     status: str = "ok"
 
     try:
-        items = signals.get_unnotified()
+        all_unnotified = signals.get_unnotified()
         recipients = get_recipients()
+
+        # インパクトスコアが閾値未満のシグナルは通知しない（旬の選別・柱3）。
+        # min_impact=0 で全件通知（従来挙動）。閾値未満は notified_at を打たず未配信のまま残す。
+        try:
+            min_impact = int(cfg.get("min_impact_for_notify"))
+        except (TypeError, ValueError):
+            min_impact = 0
+        items = [s for s in all_unnotified if (s.get("impact") or 0) >= min_impact]
+        if len(items) != len(all_unnotified):
+            logger.info("Impact filter (>=%d): %d/%d signals eligible",
+                        min_impact, len(items), len(all_unnotified))
 
         if not recipients:
             logger.info("No recipients registered, keeping %d signals unnotified", len(items))
             status = "no_recipients"
             # no_recipients は正常終了扱い。記録だけして終わる（finallyで記録する）
         elif not items:
-            logger.info("No signals; sending zero-signal notice")
+            logger.info("No eligible signals; sending zero-signal notice")
             sent_attempted = True
             res = send_text(_zero_signal_message(), recipients)
             total_ok += res.ok
@@ -75,7 +87,7 @@ def run() -> None:
                 line_error_details.extend(res.error_details)
 
             if total_error == 0 and total_ok > 0:
-                # 全送信成功時のみ通知済みにする
+                # 全送信成功時のみ通知済みにする（配信した eligible のみ）
                 notified_ids = [s["id"] for s in items]
                 signals.mark_notified(notified_ids)
                 logger.info("Done: %d signals notified", len(items))
@@ -168,9 +180,13 @@ def _build_messages(items: list) -> list:
 
 def _format_item(signal: dict) -> str:
     icon = "✅" if signal["sentiment"] == "positive" else "❌"
+    impact = signal.get("impact")
+    fire = f" 🔥{impact}" if impact else ""
     lines = []
-    for s in signal["stocks"]:
-        lines.append(f"{icon} {s['name']}({s['code']})")
+    for i, s in enumerate(signal["stocks"]):
+        # インパクトスコアは先頭銘柄の行末にだけ付ける（シグナル単位の属性のため）
+        suffix = fire if i == 0 else ""
+        lines.append(f"{icon} {s['name']}({s['code']}){suffix}")
         price = quotes.format_price(s)
         if price:
             lines.append(f"　📊 {price}")

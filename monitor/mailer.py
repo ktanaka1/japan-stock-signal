@@ -119,8 +119,9 @@ def _format_entry(idx: int, article: object, result: AnalysisResult) -> List[str
         stocks_str = "、".join(parts)
     else:
         stocks_str = "なし"
+    impact = getattr(result, "impact", None)
     return [
-        f"[{idx}] {label}",
+        f"[{idx}] {label}" + (f"  インパクト🔥{impact}" if impact else ""),
         f"銘柄: {stocks_str}",
         f"要約: {result.summary}",
         f"根拠: {result.reason}",

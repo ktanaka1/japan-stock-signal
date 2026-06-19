@@ -67,6 +67,9 @@ DEFAULTS: dict[str, str] = {
     "body_max_chars": "4000",
     "body_fetch_triggers_numeric": _BODY_FETCH_TRIGGERS_NUMERIC_DEFAULT,
     "body_fetch_triggers_catalyst": _BODY_FETCH_TRIGGERS_CATALYST_DEFAULT,
+    # インパクトスコア(1〜5) がこの値以上のシグナルのみ LINE 配信する（旬の選別）。
+    # 0 にすると全件配信（従来挙動）。既定は 4（サプライズ度4〜5を最優先）。
+    "min_impact_for_notify": "4",
 }
 
 
