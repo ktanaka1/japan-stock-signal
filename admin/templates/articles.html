@@ -13,10 +13,10 @@
 {% set qs_nopp = qs_nopp ~ ('&chg_max=' ~ chg_max if chg_max else '') %}
 {% set qs = qs_nopp ~ '&per_page=' ~ per_page %}
 {% macro price_str(s) %}
-{%- if s.close is not none -%}
+{%- if s.close|default(none) is not none -%}
   {{ '{:,.0f}'.format(s.close) }}円
-  {%- if s.change_pct is not none %} ({{ '%+.1f'|format(s.change_pct) }}%){% endif -%}
-  {%- if s.volume is not none %} {% if s.volume >= 10000 %}{{ '{:,.0f}'.format(s.volume / 10000) }}万株{% else %}{{ '{:,}'.format(s.volume) }}株{% endif %}{% endif -%}
+  {%- if s.change_pct|default(none) is not none %} ({{ '%+.1f'|format(s.change_pct) }}%){% endif -%}
+  {%- if s.volume|default(none) is not none %} {% if s.volume >= 10000 %}{{ '{:,.0f}'.format(s.volume / 10000) }}万株{% else %}{{ '{:,}'.format(s.volume) }}株{% endif %}{% endif -%}
 {%- endif -%}
 {% endmacro %}
 {% macro pager() %}
@@ -138,13 +138,15 @@
           {% else %}
             <span class="badge b-none">未分析</span>
           {% endif %}
+          {% if a.impact %}<div style="font-size:0.78rem; margin-top:3px" title="インパクトスコア（旬度1〜5）">🔥{{ a.impact }}</div>{% endif %}
         </td>
         <td style="font-size:0.82rem; white-space:nowrap">
           {% for s in a.stocks %}
             <div style="margin-bottom:3px">
               {{ s.name }}<br><span class="text-muted">{{ s.code }}</span>
               {% set p = price_str(s)|trim %}
-              {% if p %}<br><span class="{{ 'c-pos' if (s.change_pct is not none and s.change_pct > 0) else ('c-neg' if (s.change_pct is not none and s.change_pct < 0) else 'text-muted') }}" style="font-size:0.8rem">📊 {{ p }}</span>{% endif %}
+              {% set chg = s.change_pct|default(none) %}
+              {% if p %}<br><span class="{{ 'c-pos' if (chg is not none and chg > 0) else ('c-neg' if (chg is not none and chg < 0) else 'text-muted') }}" style="font-size:0.8rem">📊 {{ p }}</span>{% endif %}
             </div>
           {% endfor %}
         </td>

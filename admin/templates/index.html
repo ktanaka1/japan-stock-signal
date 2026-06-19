@@ -103,10 +103,10 @@
                   <span class="badge {{ 'b-pos' if s.sentiment == 'positive' else 'b-neg' }}">
                     {{ '✅' if s.sentiment == 'positive' else '❌' }}
                     {{ s.stocks | map(attribute='name') | join('、') }}
-                  </span>
-                  {% for st in s.stocks if st.close is not none %}
+                  </span>{% if s.impact %} <span title="インパクトスコア">🔥{{ s.impact }}</span>{% endif %}
+                  {% for st in s.stocks if st.close|default(none) is not none %}
                   <div class="text-muted" style="font-size:0.8rem">📊 {{ st.name }}
-                    {{ '{:,.0f}'.format(st.close) }}円{% if st.change_pct is not none %} ({{ '%+.1f'|format(st.change_pct) }}%){% endif %}{% if st.volume is not none %} 出来高 {% if st.volume >= 10000 %}{{ '{:,.0f}'.format(st.volume / 10000) }}万株{% else %}{{ '{:,}'.format(st.volume) }}株{% endif %}{% endif %}
+                    {{ '{:,.0f}'.format(st.close) }}円{% if st.change_pct|default(none) is not none %} ({{ '%+.1f'|format(st.change_pct) }}%){% endif %}{% if st.volume|default(none) is not none %} 出来高 {% if st.volume >= 10000 %}{{ '{:,.0f}'.format(st.volume / 10000) }}万株{% else %}{{ '{:,}'.format(st.volume) }}株{% endif %}{% endif %}
                   </div>
                   {% endfor %}
                   <div>{{ s.summary }}</div>
