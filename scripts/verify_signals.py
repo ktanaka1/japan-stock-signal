@@ -161,7 +161,7 @@ def run(date_from: str, date_to: str) -> None:
 
     rows = execute(
         """
-        SELECT s.sentiment, s.stocks, date(a.fetched_at,'+9 hours') AS news_day
+        SELECT s.sentiment, s.stocks, s.impact, date(a.fetched_at,'+9 hours') AS news_day
         FROM signals s JOIN articles a ON a.id = s.article_id
         WHERE date(a.fetched_at,'+9 hours') BETWEEN ? AND ?
         ORDER BY news_day
@@ -178,7 +178,8 @@ def run(date_from: str, date_to: str) -> None:
             key = (code, r["news_day"])
             if key not in events:
                 events[key] = {"code": code, "name": st.get("name", ""),
-                               "sentiment": r["sentiment"], "news_day": r["news_day"]}
+                               "sentiment": r["sentiment"], "news_day": r["news_day"],
+                               "impact": r["impact"]}
     codes = sorted({e["code"] for e in events.values()})
     logger.info("期間 %s〜%s ／ イベント %d件 ／ ユニーク銘柄 %d件\n", date_from, date_to, len(events), len(codes))
 
@@ -235,8 +236,25 @@ def run(date_from: str, date_to: str) -> None:
         _summarize(f"  全体  ", buckets[(sent, "中小型")] + buckets[(sent, "大型")])
     if no_data:
         logger.info("\n（データ取得不可/未確定: %d件）", no_data)
-    logger.info("\n仮説検証: 中小型セグメントで『値幅5%以上の比率』『出来高スパイク中央値』が"
-                "全体より高ければ、大型株ノイズを除いたAIの真の実力＝デイトレ向き。")
+
+    # 効果測定: 中小型ポジ を インパクト帯で分割（ベースライン＝中小型ポジ全体 値幅5%超28%）
+    logger.info("\n=== 効果測定: 中小型ポジ × インパクト帯（ベースライン 値幅5%超=28%）===")
+    smallcap_pos = buckets[("positive", "中小型")]
+    tiers = [
+        ("インパクト4〜5（最優先通知対象）", lambda i: i is not None and i >= 4),
+        ("インパクト1〜3", lambda i: i is not None and i <= 3),
+        ("impact未設定（NULL）", lambda i: i is None),
+    ]
+    for label, pred in tiers:
+        _summarize(label, [e for e in smallcap_pos if pred(e.get("impact"))])
+    # ネガも参考表示
+    logger.info("--- 参考: 中小型ネガ × インパクト帯 ---")
+    smallcap_neg = buckets[("negative", "中小型")]
+    for label, pred in tiers[:2]:
+        _summarize(label, [e for e in smallcap_neg if pred(e.get("impact"))])
+
+    logger.info("\n仮説検証: 『インパクト4〜5・中小型ポジ』の値幅5%超ヒット率が"
+                "ベースライン28%を上回れば、スコアによる選別が有効。")
 
 
 if __name__ == "__main__":
