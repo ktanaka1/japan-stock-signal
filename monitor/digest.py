@@ -16,6 +16,7 @@ from store.db import migrate
 from store import signals
 from store import digest_runs
 from store import settings as cfg
+from monitor.large_cap import all_large_cap
 from store.recipients import get_all as get_recipients
 from monitor.notifier import send_text
 from monitor import mailer
@@ -60,10 +61,16 @@ def run() -> None:
             min_impact = int(cfg.get("min_impact_for_notify"))
         except (TypeError, ValueError):
             min_impact = 0
+        exclude_large = cfg.get("exclude_large_cap").lower() == "true"
         items = [s for s in all_unnotified if (s.get("impact") or 0) >= min_impact]
+        # 大型株(全銘柄が大型)のシグナルを除外する（柱1: マクロ連動ノイズ対策）。
+        if exclude_large:
+            items = [s for s in items if not all_large_cap(s.get("stocks") or [])]
+        # 旬度の高い順（インパクト降順）に並べ、LINEの先頭に主役候補が来るようにする。
+        items.sort(key=lambda s: (s.get("impact") or 0), reverse=True)
         if len(items) != len(all_unnotified):
-            logger.info("Impact filter (>=%d): %d/%d signals eligible",
-                        min_impact, len(items), len(all_unnotified))
+            logger.info("Filter (impact>=%d, exclude_large=%s): %d/%d signals eligible",
+                        min_impact, exclude_large, len(items), len(all_unnotified))
 
         if not recipients:
             logger.info("No recipients registered, keeping %d signals unnotified", len(items))

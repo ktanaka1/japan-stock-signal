@@ -70,6 +70,8 @@ DEFAULTS: dict[str, str] = {
     # インパクトスコア(1〜5) がこの値以上のシグナルのみ LINE 配信する（旬の選別）。
     # 0 にすると全件配信（従来挙動）。既定は 4（サプライズ度4〜5を最優先）。
     "min_impact_for_notify": "4",
+    # 大型株(TOPIX Core30相当・全銘柄が大型)のシグナルを配信から除外する（柱1）。
+    "exclude_large_cap": "true",
 }
 
 
