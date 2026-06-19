@@ -32,19 +32,27 @@ def get_unnotified() -> list[dict]:
 
 
 def get_by_ids(signal_ids: list[int]) -> list[dict]:
-    """指定IDのシグナルをID昇順で返す（配信ログから内容を復元する用途）。"""
+    """指定IDのシグナルをID昇順で返す（配信ログから内容を復元する用途）。
+
+    D1 は 1クエリのバインド変数が約100個までのため、IN句を50件ずつに分割して問い合わせる
+    （一括配信で notified_ids が数百件になると IN(?,...) が上限超過で 400 になる）。
+    """
     if not signal_ids:
         return []
-    placeholders = ", ".join(["?"] * len(signal_ids))
-    rows = execute(
-        f"""
-        SELECT id, article_id, sentiment, summary, stocks, url, impact, created_at
-        FROM signals
-        WHERE id IN ({placeholders})
-        ORDER BY id ASC
-        """,
-        tuple(signal_ids),
-    ).rows
+    chunk_size = 50
+    rows: list[dict] = []
+    for i in range(0, len(signal_ids), chunk_size):
+        chunk = signal_ids[i : i + chunk_size]
+        placeholders = ", ".join(["?"] * len(chunk))
+        rows.extend(execute(
+            f"""
+            SELECT id, article_id, sentiment, summary, stocks, url, impact, created_at
+            FROM signals
+            WHERE id IN ({placeholders})
+            """,
+            tuple(chunk),
+        ).rows)
+    rows.sort(key=lambda r: r["id"])
     for row in rows:
         row["stocks"] = json.loads(row["stocks"])
     return rows
