@@ -44,12 +44,18 @@ def _build_article_filter(
     sentiment: str | None,
     code: str | None,
     notified: str | None = None,
+    price_min: float | None = None,
+    price_max: float | None = None,
+    chg_min: float | None = None,
+    chg_max: float | None = None,
 ) -> tuple[str, list]:
     """記事一覧のフィルタから WHERE句と paramsを組み立てる。
 
     get_articles / count_articles で共通利用し、件数と一覧の条件ズレを防ぐ。
     （JOIN は a=articles / aa=article_analyses / s=signals 前提）
     notified="yes" で LINE配信済み（s.notified_at IS NOT NULL）のみに絞る。
+    price_min/price_max は終値、chg_min/chg_max は前日比%。いずれかの銘柄が
+    範囲に収まる記事を抽出する（aa.stocks の json_each で評価）。
     """
     where = []
     params: list = []
@@ -73,6 +79,26 @@ def _build_article_filter(
         params.append(code + "%")
     if notified == "yes":
         where.append("s.notified_at IS NOT NULL")
+    # 価格・前日比%は stocks JSON 内のいずれかの銘柄が範囲に収まればヒット。
+    # 価格未付与の銘柄（close/change_pct なし）は CAST が NULL になり範囲比較で除外される。
+    if price_min is not None or price_max is not None:
+        lo = price_min if price_min is not None else -1e18
+        hi = price_max if price_max is not None else 1e18
+        where.append(
+            "aa.stocks IS NOT NULL AND EXISTS ("
+            "SELECT 1 FROM json_each(aa.stocks) je "
+            "WHERE CAST(json_extract(je.value, '$.close') AS REAL) BETWEEN ? AND ?)"
+        )
+        params.extend([lo, hi])
+    if chg_min is not None or chg_max is not None:
+        lo = chg_min if chg_min is not None else -1e18
+        hi = chg_max if chg_max is not None else 1e18
+        where.append(
+            "aa.stocks IS NOT NULL AND EXISTS ("
+            "SELECT 1 FROM json_each(aa.stocks) je "
+            "WHERE CAST(json_extract(je.value, '$.change_pct') AS REAL) BETWEEN ? AND ?)"
+        )
+        params.extend([lo, hi])
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
     return where_sql, params
 
@@ -83,6 +109,10 @@ def get_articles(
     sentiment: str | None = None,
     code: str | None = None,
     notified: str | None = None,
+    price_min: float | None = None,
+    price_max: float | None = None,
+    chg_min: float | None = None,
+    chg_max: float | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[dict], bool]:
@@ -90,10 +120,12 @@ def get_articles(
 
     date_str / year / sentiment / code / notified は任意のフィルタ。sentiment="none" は未分析記事のみ。
     year は対象年(JST)。code は銘柄コードの前方一致（stocks JSON内のいずれかのcodeにマッチ）。
-    notified="yes" は LINE配信済みのみ。
+    notified="yes" は LINE配信済みのみ。price_min/max は終値、chg_min/max は前日比%。
     次ページの有無を判定するため limit+1 件取得し、(rows[:limit], has_next) を返す。
     """
-    where_sql, params = _build_article_filter(date_str, year, sentiment, code, notified)
+    where_sql, params = _build_article_filter(
+        date_str, year, sentiment, code, notified, price_min, price_max, chg_min, chg_max
+    )
 
     sql = f"""
         SELECT
@@ -131,12 +163,18 @@ def count_articles(
     sentiment: str | None = None,
     code: str | None = None,
     notified: str | None = None,
+    price_min: float | None = None,
+    price_max: float | None = None,
+    chg_min: float | None = None,
+    chg_max: float | None = None,
 ) -> int:
     """get_articles と同一フィルタに一致する記事の総件数を返す。
 
     WHERE句は get_articles と共通の _build_article_filter を使うため条件は完全一致。
     """
-    where_sql, params = _build_article_filter(date_str, year, sentiment, code, notified)
+    where_sql, params = _build_article_filter(
+        date_str, year, sentiment, code, notified, price_min, price_max, chg_min, chg_max
+    )
     sql = f"""
         SELECT COUNT(*) AS cnt
         FROM articles a

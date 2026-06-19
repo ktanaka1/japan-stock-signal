@@ -18,6 +18,7 @@ from store import digest_runs
 from store.recipients import get_all as get_recipients
 from monitor.notifier import send_text
 from monitor import mailer
+from monitor import quotes
 
 logging.basicConfig(
     level=logging.INFO,
@@ -167,8 +168,15 @@ def _build_messages(items: list) -> list:
 
 def _format_item(signal: dict) -> str:
     icon = "✅" if signal["sentiment"] == "positive" else "❌"
-    stocks_str = "、".join(f"{s['name']}({s['code']})" for s in signal["stocks"])
-    return f"{icon} {stocks_str}\n　{signal['summary']}\n　{signal['url']}"
+    lines = []
+    for s in signal["stocks"]:
+        lines.append(f"{icon} {s['name']}({s['code']})")
+        price = quotes.format_price(s)
+        if price:
+            lines.append(f"　📊 {price}")
+    lines.append(f"　{signal['summary']}")
+    lines.append(f"　{signal['url']}")
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":

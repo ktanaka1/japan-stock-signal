@@ -15,6 +15,7 @@ from email.mime.text import MIMEText
 from typing import List, Optional, Tuple
 
 from monitor.analyzer import AnalysisResult
+from monitor import quotes
 
 logger = logging.getLogger(__name__)
 
@@ -110,10 +111,14 @@ def _build_report(
 
 def _format_entry(idx: int, article: object, result: AnalysisResult) -> List[str]:
     label = _SENTIMENT_LABEL.get(result.sentiment, result.sentiment)
-    stocks_str = (
-        "、".join(f"{s['name']}({s['code']})" for s in result.stocks)
-        if result.stocks else "なし"
-    )
+    if result.stocks:
+        parts = []
+        for s in result.stocks:
+            price = quotes.format_price(s)
+            parts.append(f"{s['name']}({s['code']})" + (f" {price}" if price else ""))
+        stocks_str = "、".join(parts)
+    else:
+        stocks_str = "なし"
     return [
         f"[{idx}] {label}",
         f"銘柄: {stocks_str}",
