@@ -15,7 +15,9 @@
 
 ```
 [データ収集役 collector]  毎日 6:00〜23:00 JST、1時間ごと（週末も稼働）
-  - RSSフィードから記事を収集
+  - RSS + TDnet(JSON)から記事を収集
+  - 数値系開示(業績/配当/決算)は本文(XBRL確定値 or PDFテキスト)も収集時に取得
+  - TDnet開示には権威ある証券コード・社名を付与（銘柄同定をLLM任せにしない）
   - 新着だけをストアに登録（URLで重複排除）
 
        ↓ articles（未読）
@@ -64,8 +66,9 @@ flowchart TD
 
 設計判断のポイント:
 
-- **収集は1時間ごと**: RSSは「直近N件」しか見えない窓（TDnetは300件）なので、1日1回の一括取得だと窓から流れた開示を取りこぼす
+- **収集は1時間ごと**: RSS/TDnetは「直近N件」しか見えない窓（TDnet JSONは直近100件）なので、1日1回の一括取得だと窓から流れた開示を取りこぼす
 - **精査は定期実行でシグナルをaddしていく**: 朝の一括分析だと配信遅延リスクがあり、Gemini無料枠（約10リクエスト/分・250リクエスト/日）にも収まらない。日中に分散し、バッチプロンプトでリクエスト数を抑える
+- **分析は逐次保存・1回あたり上限**: `analyze_batch` はバッチ単位で結果をyieldし、バッチ完了ごとに保存・既読化する（再起動・再デプロイで中断されても処理済み分は確定＝二重課金しない／`INSERT OR IGNORE`で冪等）。`settings.max_articles_per_run`（既定200）で1実行の処理量を抑え、バックログは複数回の実行で漸減させる
 - **配信は7:30**: 米国市場の引け（JST朝5〜6時）を受けた早朝ニュースを7時台の収集・精査で取り込んだ上で、PTSデイタイム開始（8:20）や寄付き前の準備時間を確保する
 - **月曜朝は金曜朝以降の3日分**（週末のニュース含む）がまとまって届く
 
@@ -110,11 +113,26 @@ flowchart TD
 > 補足: 場中のリアルタイム監視（ギャップ率・出来高ランキング）はSBI等の証券アプリに任せる。本システムの役割は
 > **9:00オープン前に“今日の主役候補”を数銘柄に絞る**ことに限定する（場中の追走通知は実装しない方針）。
 
+## 開示本文の動的分析（XBRL優先＋PDFテキスト ハイブリッド）
+
+数値系開示（業績予想の修正・決算・配当）は、collector が収集時に本文を取得して LLM に渡す。
+
+- **XBRL があれば**標準タクソノミタグから確定数値を抽出（前回予想↔今回・前期実績の比較、高信頼）
+- **XBRL が無ければ**開示PDFの埋め込みテキストを抽出し、厳格プロンプトで上方/下方を数値比較判定させる
+  （核心の「業績予想の修正」はXBRL付与が約2割のためPDFフォールバックが必須）
+- OCR（画像読み取り）・自前の脆い表組みパーサは持たない。PDFは「テキスト抽出してLLMに渡すだけ」
+- 実装: `collector/body_fetcher.py`（取得・テキスト化）＋ `collector/xbrl_parser.py`（XBRL構造化抽出）。
+  記事の処理ルートは `articles.body_status`（`xbrl`/`pdf_text`/`title_only`/`error`）で持つ
+
+**銘柄同定の権威化**: TDnet が返す `company_code`/`company_name` を `articles.security_code`/`security_name`
+に保存し、分析時に開示会社を権威コード（5桁→4桁正規化）＋社名で確定する（`monitor/agent._reconcile_identity`）。
+LLMが生成した社名のハルシネーション（コードは正でも社名が別会社）や、コード抽出漏れを補正する。
+
 ## ストア（Cloudflare D1）
 
 | テーブル | 役割 | 主なカラム |
 |---|---|---|
-| articles | 収集した記事 | title, body, url(UNIQUE), fetched_at, is_read |
+| articles | 収集した記事 | title, body, url(UNIQUE), fetched_at, is_read, security_code/security_name(開示の権威コード・社名), body_status, full_body, xbrl_metrics, correction_reason |
 | signals | 検出したシグナル | article_id(UNIQUE), sentiment, summary, stocks(JSON・終値等を含む), url, impact(1〜5), created_at, notified_at |
 | article_analyses | 分析結果（一覧/絞り込み用） | article_id(UNIQUE), sentiment, summary, reason, stocks(JSON), became_signal, impact |
 | digest_runs | 配信実行ログ | status, signal_count, line_ok/error, error_detail, notified_ids(JSON), run_at |
@@ -128,7 +146,7 @@ flowchart TD
 | ソース | URL |
 |---|---|
 | Yahoo!ニュース ビジネス | https://news.yahoo.co.jp/rss/topics/business.xml |
-| TDnet 適時開示（やのしんWEB-API） | https://webapi.yanoshin.jp/webapi/tdnet/list/recent.rss |
+| TDnet 適時開示（やのしんWEB-API・JSON） | https://webapi.yanoshin.jp/webapi/tdnet/list/recent.json?limit=100 |
 | NHK 経済 | https://www.nhk.or.jp/rss/news/cat6.xml |
 
 ## インフラ（すべて無料枠）
