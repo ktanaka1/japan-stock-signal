@@ -84,12 +84,19 @@ def _fetch_tdnet_json() -> list[Article]:
         # RSSサマリー相当が無いため body は空（従来も実測平均36字の薄いサマリー）
         article = Article(title=title, body="", url=document_url)
 
+        # 全TDnet開示に権威ある同定情報（証券コード＋社名）を付与する。
+        # 銘柄の同定をLLM生成任せにせず、開示会社をここで確定する（社名ハルシネーション対策）。
+        # ※company_code は5桁（証券コード4桁＋チェック桁）。4桁への正規化は利用側(monitor)で行う。
+        article.security_code = (t.get("company_code") or "").strip() or None
+        article.security_name = (t.get("company_name") or "").strip() or None
+
         if is_numeric_disclosure(title):
             # 系統A: 本文取得メタを横付け（DBには保存しない transient 情報）
             setattr(article, TDNET_META_ATTR, {
                 "document_url": document_url,
                 "url_xbrl": (t.get("url_xbrl") or "").strip() or None,
                 "company_code": (t.get("company_code") or "").strip() or None,
+                "company_name": (t.get("company_name") or "").strip() or None,
             })
         articles.append(article)
     return articles

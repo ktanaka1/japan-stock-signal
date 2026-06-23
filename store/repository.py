@@ -33,14 +33,14 @@ def save_with_body(article: Article) -> tuple[Article, bool]:
     result = execute(
         """
         INSERT OR IGNORE INTO articles
-            (title, body, url, security_code, xbrl_metrics, full_body,
+            (title, body, url, security_code, security_name, xbrl_metrics, full_body,
              correction_reason, body_status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             article.title, article.body, article.url,
-            article.security_code, article.xbrl_metrics, article.full_body,
-            article.correction_reason, article.body_status,
+            article.security_code, article.security_name, article.xbrl_metrics,
+            article.full_body, article.correction_reason, article.body_status,
         ),
     )
     is_new = result.changes > 0
@@ -58,18 +58,23 @@ def save_with_body(article: Article) -> tuple[Article, bool]:
 
 
 def save_many(articles: list[Article]) -> int:
-    """記事をまとめて保存し、新規保存できた件数を返す。既存URLはスキップ。"""
+    """記事をまとめて保存し、新規保存できた件数を返す。既存URLはスキップ。
+
+    TDnet開示は権威ある security_code / security_name を持つ（RSS由来は None）。
+    本文取得をしない系統B・非該当でも同定情報は失わず保存する（銘柄同定の権威化）。
+    """
     # D1のREST APIは1クエリ=1リクエストなので、複数行VALUESでラウンドトリップを減らす
     chunk_size = 30
     new_count = 0
     for i in range(0, len(articles), chunk_size):
         chunk = articles[i : i + chunk_size]
-        placeholders = ", ".join(["(?, ?, ?)"] * len(chunk))
+        placeholders = ", ".join(["(?, ?, ?, ?, ?)"] * len(chunk))
         params: list = []
         for a in chunk:
-            params.extend([a.title, a.body, a.url])
+            params.extend([a.title, a.body, a.url, a.security_code, a.security_name])
         result = execute(
-            f"INSERT OR IGNORE INTO articles (title, body, url) VALUES {placeholders}",
+            "INSERT OR IGNORE INTO articles (title, body, url, security_code, security_name)"
+            f" VALUES {placeholders}",
             tuple(params),
         )
         new_count += result.changes
@@ -100,7 +105,8 @@ def get_unread(limit: int | None = None) -> list[Article]:
     """
     sql = """
         SELECT id, title, body, url, fetched_at, is_read,
-               security_code, xbrl_metrics, full_body, correction_reason, body_status
+               security_code, security_name, xbrl_metrics, full_body,
+               correction_reason, body_status
         FROM articles
         WHERE is_read = 0
         ORDER BY fetched_at ASC
@@ -119,6 +125,7 @@ def get_unread(limit: int | None = None) -> list[Article]:
             fetched_at=row["fetched_at"],
             is_read=bool(row["is_read"]),
             security_code=row["security_code"],
+            security_name=row["security_name"],
             xbrl_metrics=row["xbrl_metrics"],
             full_body=row["full_body"],
             correction_reason=row["correction_reason"],

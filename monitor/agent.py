@@ -29,6 +29,40 @@ logger = logging.getLogger(__name__)
 _CODE_RE = re.compile(r"^[0-9A-Za-z]{4}$")
 
 
+def _normalize_security_code(code) -> str | None:
+    """開示由来コードを4桁(英数)の証券コードへ正規化する。該当しなければ None。
+
+    yanoshin の company_code は '65330'(=6533) のような5桁（証券コード4桁＋チェック桁）。
+    先頭4桁を採る。新形式英数 '587A4'→'587A' も同様。XBRL由来の4桁はそのまま。
+    """
+    code = str(code or "").strip()
+    if len(code) == 5:
+        code = code[:4]
+    return code if _CODE_RE.match(code) else None
+
+
+def _reconcile_identity(article: object, stocks: list) -> list:
+    """TDnet開示の開示会社を権威ある(コード, 社名)で確定する。
+
+    記事が権威ある security_code / security_name を持つ場合、その証券コードの銘柄の
+    社名をLLM生成値で上書きせず権威値に確定する（社名ハルシネーション対策）。LLMが当該
+    コードを挙げていなければ先頭に追加する。RSS由来（権威情報なし）は何もしない。
+    """
+    name = (getattr(article, "security_name", None) or "").strip()
+    auth_code = _normalize_security_code(getattr(article, "security_code", None))
+    if not auth_code or not name:
+        return stocks
+    matched = False
+    for s in stocks:
+        if str(s.get("code", "")).strip() == auth_code:
+            s["name"] = name  # LLMが捏造した社名を権威社名で確定する
+            matched = True
+    if not matched:
+        # LLMが開示会社のコードを挙げていない＝同定漏れ。権威データで補う。
+        stocks.insert(0, {"name": name, "code": auth_code})
+    return stocks
+
+
 def _clean_stocks(stocks: list) -> list:
     """銘柄リストから不正なコードの銘柄を除外し、コードを trim して返す。
 
@@ -84,6 +118,8 @@ def run() -> None:
                 continue  # 分析失敗分は未読のまま残し、次回再挑戦する
             # 不正コードの銘柄を登録前に除外する（空コード・桁違いを弾く）。
             result.stocks = _clean_stocks(result.stocks)
+            # TDnet開示は開示会社を権威データで確定する（LLMの社名捏造・同定漏れを補正）。
+            result.stocks = _reconcile_identity(article, result.stocks)
             is_signal = result.sentiment in signal_sentiments and (
                 not require_stocks or bool(result.stocks)
             )

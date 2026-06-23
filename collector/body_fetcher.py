@@ -48,6 +48,7 @@ class BodyResult:
     body_status: str  # 'xbrl' | 'pdf_text' | 'error'
     full_body: Optional[str] = None
     security_code: Optional[str] = None
+    security_name: Optional[str] = None  # 開示由来の権威ある社名（yanoshin company_name）
     # XBRL経路の構造化抽出結果（Step③）。PDF経路では常に None。
     xbrl_metrics: Optional[str] = None       # 正規化数値＋機械方向ラベルのJSON文字列（抽出0件なら None）
     correction_reason: Optional[str] = None  # 定性タグ由来の修正理由テキスト（無ければ None）
@@ -58,24 +59,32 @@ def fetch_body(
     document_url: Optional[str],
     url_xbrl: Optional[str],
     company_code: Optional[str],
+    company_name: Optional[str] = None,
 ) -> BodyResult:
     """系統A該当開示の本文を取得・テキスト化する。
 
     例外は内部で握り、失敗時は body_status='error' を返す（呼び出し側を止めない）。
+    company_name は本文取得の成否に関わらず権威ある社名として結果に付与する
+    （銘柄同定をLLM任せにせず開示会社を確定するため）。
     """
     code = (company_code or "").strip() or None
+    name = (company_name or "").strip() or None
     try:
         if url_xbrl:
-            return _fetch_xbrl(url_xbrl, code)
-        if document_url:
-            return _fetch_pdf(document_url, code)
-        # メタ不足（想定内）。degrade。
-        logger.info("body fetch: no document_url/url_xbrl; degrade to error")
-        return BodyResult(body_status="error", security_code=code)
+            result = _fetch_xbrl(url_xbrl, code)
+        elif document_url:
+            result = _fetch_pdf(document_url, code)
+        else:
+            # メタ不足（想定内）。degrade。
+            logger.info("body fetch: no document_url/url_xbrl; degrade to error")
+            result = BodyResult(body_status="error", security_code=code)
     except Exception:
         # 予期せぬ例外のみ warning（想定内の404等はここまで来ない＝下層で握る）。
         logger.warning("body fetch: unexpected error; degrade to error", exc_info=True)
-        return BodyResult(body_status="error", security_code=code)
+        result = BodyResult(body_status="error", security_code=code)
+    # 社名は本文取得の経路・成否に依らず常に付与する（取得失敗でも開示会社は確定できる）。
+    result.security_name = name
+    return result
 
 
 # --- XBRL（zip → iXBRL htm テキスト） ---

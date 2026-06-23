@@ -57,10 +57,12 @@ def _process_body_targets(targets: list) -> int:
             document_url=meta.get("document_url"),
             url_xbrl=meta.get("url_xbrl"),
             company_code=meta.get("company_code"),
+            company_name=meta.get("company_name"),
         )
         article.body_status = result.body_status
         article.full_body = result.full_body
         article.security_code = result.security_code
+        article.security_name = result.security_name
         article.xbrl_metrics = result.xbrl_metrics
         article.correction_reason = result.correction_reason
         try:
