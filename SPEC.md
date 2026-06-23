@@ -128,6 +128,30 @@ flowchart TD
 に保存し、分析時に開示会社を権威コード（5桁→4桁正規化）＋社名で確定する（`monitor/agent._reconcile_identity`）。
 LLMが生成した社名のハルシネーション（コードは正でも社名が別会社）や、コード抽出漏れを補正する。
 
+## 捕捉率フィードバック（ピックアップ精度の計測と改善提案）
+
+本体が「市場の動意」をどれだけ拾えているかを毎営業日自動で採点し、**ピックアップロジックの
+ブラッシュアップ**につなげる計測系（`feedback/` パッケージ・平日引け後 cron）。本体ロジックには触れない。
+
+- 引け後に値上がり率ランキング上位30（中小型・非ETF）を取得（`feedback/ranking.py`、Yahoo の
+  `__PRELOADED_STATE__` を httpx 取得）し、自システムの当日処理と突き合わせる
+- 各銘柄を `delivered`（配信済）/ `signaled_not_delivered`（拾ったが未配信）/ `analyzed_neutral`
+  （分析したが中立で落とした）/ `not_collected`（収集網の外）に分類
+- **捕捉率**（delivered / 母集団）を時系列で記録し、支配的な取りこぼしクラスから改善レバー
+  （収集網拡張・中立基準見直し・閾値チューニング 等）を提案する。`coverage_runs` に保存し管理画面に表示
+- 出力は助言で、ロジックは自動変更しない（人が判断して別途反映）
+
+## テクニカル版 朝のシグナル（価格/出来高駆動の別系統）
+
+ニュース/開示を伴わないテーマ・需給・モメンタム駆動の動意は本体（ニュース起因）の対象外のため、
+**独立した第2系統**として配信する（`technical/` パッケージ・平日朝8:00 JST cron）。本体ロジックには触れない。
+
+- 値上がり率ランキング上位30（中小型・非ETF）のうち「**値上がり率≥5% かつ 出来高急増≥2倍**
+  （当日出来高 / 直近4営業日平均、`monitor/quotes.py`）」の複合条件で抽出
+- **本体digest（7:30）の後に実行**し、本体が当日配信した銘柄は除外（二重配信防止）。寄り前に届ける
+- 本体（✅/❌＋🔥）と区別した「📊 テクニカル注目」LINE。値動きが主役なので前日比%・出来高倍率を明示
+- 閾値は settings（`tech_min_change_pct` / `tech_min_volume_surge` / `tech_top_n` / `tech_dedup_with_news`）で調整可。`technical_runs` に配信記録
+
 ## ストア（Cloudflare D1）
 
 | テーブル | 役割 | 主なカラム |
@@ -136,6 +160,8 @@ LLMが生成した社名のハルシネーション（コードは正でも社�
 | signals | 検出したシグナル | article_id(UNIQUE), sentiment, summary, stocks(JSON・終値等を含む), url, impact(1〜5), created_at, notified_at |
 | article_analyses | 分析結果（一覧/絞り込み用） | article_id(UNIQUE), sentiment, summary, reason, stocks(JSON), became_signal, impact |
 | digest_runs | 配信実行ログ | status, signal_count, line_ok/error, error_detail, notified_ids(JSON), run_at |
+| coverage_runs | 捕捉率フィードバックの記録 | ranking_date, ranking_type, top_n, universe, captured/signaled/neutral/not_collected, capture_rate, detail(JSON), proposal |
+| technical_runs | テクニカル版の配信記録 | target_date, status, pick_count, line_ok/error, picks(JSON), error_detail |
 | recipients | LINE受信者 | line_user_id(UNIQUE), followed_at |
 
 - D1はSQLite互換。store層は `CLOUDFLARE_*` 環境変数があればD1 REST API、なければローカルSQLite（開発用）
@@ -154,16 +180,19 @@ LLMが生成した社名のハルシネーション（コードは正でも社�
 | 役割 | サービス |
 |---|---|
 | DB | Cloudflare D1 |
-| 収集・精査・通知の定期実行 | GitHub Actions schedule（publicリポジトリのため無制限） |
+| 定期実行（収集/精査/配信/捕捉率FB/テクニカル版） | GitHub Actions schedule（publicリポジトリのため無制限。collector/monitor/digest/feedback/technical の5ワークフロー） |
 | LINE Webhookサーバー（受信者管理） | Render Free Web Service |
 | LLM | Gemini API（既定 gemini-2.5-flash、管理画面で変更可） |
 
 ## 将来の拡張候補（未実装）
 
 - [ ] X(旧Twitter)の株クラ等のセンチメント指標を拾うパイプライン追加
-- [ ] エラー通知の強化・Renderコールドスタート対策（インフラ堅牢化）
+- [ ] Renderコールドスタート対策（インフラ堅牢化）
 - [ ] TDnetタイトルのキーワード事前フィルタでLLMコストをさらに削減
 - [ ] 銘柄ごとのグルーピング、株価チャートへのリンク付与
+- [ ] データ保持・ローテーション（古い中立・銘柄なし記事の削除。`docs/specs/_wips/data-retention.md`）
 
-> 実装済み: 影響度スコア(1〜5)による重要度順配信＝「シグナルの選別」へ統合。
+> 実装済み: 影響度スコア(1〜5)による重要度順配信＝「シグナルの選別」／開示の数値分析＝「開示本文の動的分析」／
+> 銘柄同定の権威化（TDnet社名＋Yahooコード実在検証）／捕捉率フィードバック／テクニカル版 朝のシグナル／
+> TDnet取得の障害アラート（連続失敗でメール）。
 > 破棄: 場中の即時/追走通知（証券アプリの劣化版になり特別気配の判定も困難なため。同節の補足参照）。
