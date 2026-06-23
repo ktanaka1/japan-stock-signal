@@ -95,6 +95,49 @@ def enrich(stocks: List[dict]) -> None:
         stock["asof"] = q.asof
 
 
+def get_daily_metrics(code: str) -> Optional[dict]:
+    """直近確定足の close / change_pct / volume と出来高急増倍率(surge) を返す。
+
+    range=10d の日足を取り、_drop_unsettled_today で当日場中の未確定足を除く。
+    早朝(寄り前)は最新確定足＝前営業日になるため、「前日の動意」をそのまま評価できる。
+    surge = 最新確定足の出来高 / それ以前 最大4営業日の平均出来高。取得不能なら None。
+    """
+    code = (code or "").strip()
+    if not code:
+        return None
+    try:
+        resp = httpx.get(
+            _CHART_URL.format(code=code),
+            params={"interval": "1d", "range": "10d"},
+            headers=_HEADERS, timeout=_TIMEOUT, follow_redirects=True,
+        )
+        if resp.status_code != 200:
+            logger.warning("metrics %s: HTTP %s", code, resp.status_code)
+            return None
+        series = _drop_unsettled_today(_extract_series(resp.json()))
+    except (httpx.RequestError, ValueError, KeyError, IndexError, TypeError) as exc:
+        logger.warning("metrics %s: failed (%s)", code, exc)
+        return None
+    if len(series) < 2:
+        return None
+    last_close, last_vol, last_ts = series[-1]
+    prev_close = series[-2][0]
+    change_pct = round((last_close - prev_close) / prev_close * 100, 2) if prev_close else None
+    prior_vols = [v for _, v, _ in series[:-1] if v is not None][-4:]
+    surge = None
+    if last_vol and prior_vols:
+        avg = sum(prior_vols) / len(prior_vols)
+        surge = round(last_vol / avg, 2) if avg else None
+    asof = datetime.fromtimestamp(last_ts, JST).strftime("%Y-%m-%d") if last_ts else ""
+    return {
+        "close": round(float(last_close), 1),
+        "change_pct": change_pct,
+        "volume": int(last_vol) if last_vol is not None else None,
+        "surge": surge,
+        "asof": asof,
+    }
+
+
 def format_price(stock: dict) -> str:
     """enrich 済みの銘柄dictを配信向けの株価文字列に整形する。
 

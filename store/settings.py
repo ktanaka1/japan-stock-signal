@@ -76,6 +76,11 @@ DEFAULTS: dict[str, str] = {
     "tdnet_fail_alert_threshold": "3",
     # TDnet(やのしん)から1回に取得する開示件数。引け後の窓溢れ対策で既定300。
     "tdnet_fetch_limit": "300",
+    # テクニカル版 朝のシグナル（価格/出来高駆動の別系統スキャナ）の検知パラメータ。
+    "tech_min_change_pct": "5.0",      # 値上がり率の下限(%)
+    "tech_min_volume_surge": "2.0",    # 出来高急増倍率の下限(倍。当日出来高/直近平均)
+    "tech_top_n": "30",                # 値上がり率ランキング上位何件を母集団にするか
+    "tech_dedup_with_news": "true",    # 本体ニュース版で当日配信済みの銘柄を除外するか
 }
 
 
