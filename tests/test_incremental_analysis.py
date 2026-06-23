@@ -82,7 +82,6 @@ def test_incremental_save_on_abort(monkeypatch):
         yield [(arts[4], None), (arts[5], None)]
 
     monkeypatch.setattr(agent, "analyze_batch", fake_batches)
-    monkeypatch.setattr(agent, "send_analysis_report", lambda *a, **k: None)
 
     agent.run()
 
@@ -134,7 +133,6 @@ def test_idempotent_rerun():
     from store.db import execute
     from monitor import agent
 
-    monkeypatch_report(agent)
     arts = [_make_article(repository, f"決算{i}", f"http://y/{i}") for i in range(3)]
 
     agent.run()
@@ -164,7 +162,6 @@ def test_max_articles_per_run_limit():
     from store.db import execute
     from monitor import agent
 
-    monkeypatch_report(agent)
     cfg.set_value("max_articles_per_run", "3")
 
     for i in range(8):
@@ -179,11 +176,6 @@ def test_max_articles_per_run_limit():
     assert len(repository.get_unread()) == 5
 
     del os.environ["DRY_RUN"]
-
-
-def monkeypatch_report(agent_mod):
-    """send_analysis_report をno-op化（SMTP未設定環境での副作用回避）。"""
-    agent_mod.send_analysis_report = lambda *a, **k: None
 
 
 # --------------------------------------------------------------------------

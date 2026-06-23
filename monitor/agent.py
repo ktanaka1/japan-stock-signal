@@ -15,7 +15,6 @@ from store.db import migrate
 from store import repository, signals, analyses
 from store import settings as cfg
 from monitor.analyzer import analyze_batch
-from monitor.mailer import send_analysis_report
 from monitor import quotes
 
 logging.basicConfig(
@@ -66,9 +65,6 @@ def run() -> None:
     signal_count = 0
     skipped = 0
     failed = 0
-    signal_article_ids: set = set()
-    # 分析レポートは最後にまとめて送るため、全バッチの (article, result) を蓄積する。
-    all_results: list = []
 
     # バッチが届くたびに保存・既読化する（逐次保存）。
     # 途中で中断・打ち切りされても、処理済みバッチは確定して未読から外れる。
@@ -81,7 +77,6 @@ def run() -> None:
         body_max_chars=int(settings["body_max_chars"]),
     )
     for chunk in batches:
-        all_results.extend(chunk)
         processed_ids = []
         for article, result in chunk:
             if result is None:
@@ -101,7 +96,6 @@ def run() -> None:
                     article.id, result.sentiment, result.summary, result.stocks, article.url,
                     impact=result.impact,
                 )
-                signal_article_ids.add(article.id)
                 signal_count += 1
                 logger.info(
                     "Signal: article %d, %s, stocks=%s",
@@ -131,8 +125,6 @@ def run() -> None:
         skipped,
         failed,
     )
-
-    send_analysis_report(all_results, signal_article_ids)
 
 
 if __name__ == "__main__":
