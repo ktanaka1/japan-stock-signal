@@ -24,22 +24,27 @@ _TAG_RE = re.compile(r"<[^>]+>")
 TDNET_META_ATTR = "tdnet_meta"
 
 
-def fetch_all() -> list[Article]:
-    """全ソースから記事を収集する。
+def fetch_all() -> tuple[list[Article], bool]:
+    """全ソースから記事を収集する。戻り値は (articles, tdnet_ok)。
 
     - TDnet: やのしんJSONから取得。系統A該当開示には取得メタ（document_url/url_xbrl/
       company_code）を Article.<TDNET_META_ATTR> に横付けする（collector が本文取得に使う）。
     - Yahoo!/NHK: 従来RSSのまま（系統B扱い・本文取得しない）。
+
+    tdnet_ok は TDnet（唯一の適時開示ソース）の取得に成功したか。落ちると開示が
+    ゼロになるため、collector 側で連続失敗を監視して障害アラートを出す判断材料にする。
     """
     from store import settings as cfg
 
     articles: list[Article] = []
+    tdnet_ok = False
 
     # --- TDnet（JSON） ---
     try:
         tdnet = _fetch_tdnet_json()
         logger.info("Fetched %d entries from TDnet JSON", len(tdnet))
         articles.extend(tdnet)
+        tdnet_ok = True
     except Exception:
         logger.warning("Failed to fetch TDnet JSON", exc_info=True)
 
@@ -58,7 +63,7 @@ def fetch_all() -> list[Article]:
             articles.extend(fetched)
         except Exception:
             logger.warning("Failed to fetch %s", url, exc_info=True)
-    return articles
+    return articles, tdnet_ok
 
 
 def _fetch_tdnet_json() -> list[Article]:

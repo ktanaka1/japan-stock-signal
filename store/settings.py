@@ -72,6 +72,8 @@ DEFAULTS: dict[str, str] = {
     "min_impact_for_notify": "4",
     # 大型株(TOPIX Core30相当・全銘柄が大型)のシグナルを配信から除外する（柱1）。
     "exclude_large_cap": "true",
+    # TDnet取得がこの回数連続で失敗したら障害アラートメールを送る（collector）。
+    "tdnet_fail_alert_threshold": "3",
 }
 
 

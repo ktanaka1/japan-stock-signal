@@ -50,6 +50,42 @@ def send_digest_alert(error_detail: str, run_at_jst: str) -> None:
     _send(to_addr, subject, body)
 
 
+def send_collector_alert(fail_streak: int, run_at_jst: str) -> None:
+    """TDnet取得の連続失敗をメールで通知する。REPORT_EMAIL 未設定の場合はスキップ。
+
+    収集源(TDnet)が落ちると適時開示シグナルがゼロになるが、warningログだけでは
+    気付けないため、連続失敗が閾値に達した時に1通だけ送る（collector が再送抑止）。
+    """
+    to_addr = os.getenv("REPORT_EMAIL", "").strip()
+    if not to_addr:
+        return
+    subject = f"[株シグナル] ⚠TDnet取得障害（{fail_streak}回連続失敗）"
+    body = "\n".join([
+        "TDnet（適時開示）の取得が連続で失敗しています。",
+        f"連続失敗回数: {fail_streak}",
+        f"検知日時: {run_at_jst}",
+        "",
+        "開示ベースのシグナルが入らない状態です。"
+        "やのしんWEB-API/ネットワーク疎通をご確認ください。",
+        "（RSSニュースの収集は継続しています）",
+    ])
+    _send(to_addr, subject, body)
+
+
+def send_collector_recovery(fail_streak: int, run_at_jst: str) -> None:
+    """TDnet取得が復旧したことをメールで通知する。REPORT_EMAIL 未設定の場合はスキップ。"""
+    to_addr = os.getenv("REPORT_EMAIL", "").strip()
+    if not to_addr:
+        return
+    subject = "[株シグナル] ✅TDnet取得が復旧しました"
+    body = "\n".join([
+        "TDnet（適時開示）の取得が復旧しました。",
+        f"復旧日時: {run_at_jst}",
+        f"（直前まで {fail_streak} 回連続で失敗）",
+    ])
+    _send(to_addr, subject, body)
+
+
 def send_analysis_report(
     results: List[Tuple[object, Optional[AnalysisResult]]],
     signal_ids: set,

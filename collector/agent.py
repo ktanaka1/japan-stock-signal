@@ -6,11 +6,14 @@
 """
 import logging
 import sys
+from datetime import datetime, timedelta, timezone
 
 from store.db import migrate
 from store import repository
+from store import settings as cfg
 from collector.fetcher import fetch_all, TDNET_META_ATTR
 from collector import body_fetcher
+from monitor import mailer
 
 logging.basicConfig(
     level=logging.INFO,
@@ -19,10 +22,18 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+JST = timezone(timedelta(hours=9))
+
+# TDnet取得の連続失敗を監視する状態キー（settingsテーブルに永続化。configではなく内部状態）。
+_TDNET_FAIL_KEY = "tdnet_fail_streak"      # 連続失敗回数
+_TDNET_ALERTED_KEY = "tdnet_alerted"       # 障害アラート送信済みフラグ（"1"=送信済み）
+
 
 def run() -> None:
     migrate()
-    articles = fetch_all()
+    run_at_jst = datetime.now(JST).strftime("%Y-%m-%d %H:%M JST")
+    articles, tdnet_ok = fetch_all()
+    _check_tdnet_health(tdnet_ok, run_at_jst)
 
     # 系統A（本文取得メタ付き）とそれ以外（系統B・非該当・他ソース）に振り分ける
     body_targets = [a for a in articles if getattr(a, TDNET_META_ATTR, None)]
@@ -38,6 +49,46 @@ def run() -> None:
         "Collected %d articles (%d body-targets); new: %d plain, %d with body",
         len(articles), len(body_targets), new_plain, new_body,
     )
+
+
+def _int_setting(key: str, default: int) -> int:
+    """settings の値を int で読む。未設定・不正は default。"""
+    try:
+        return int(cfg.get(key))
+    except (TypeError, ValueError):
+        return default
+
+
+def _check_tdnet_health(tdnet_ok: bool, run_at_jst: str) -> None:
+    """TDnet取得の連続失敗を検知し、閾値到達で一度だけメール障害アラートを送る。
+
+    収集源(TDnet)が落ちると開示がゼロになるが、従来は warning ログのみで気付けなかった。
+    連続失敗回数を settings に永続化し、閾値(tdnet_fail_alert_threshold・既定3)到達時に1通、
+    復旧時に1通だけ送る（毎回送らないよう alerted フラグで再送抑止）。
+    無通知＝障害と区別する既存思想（digest）と同じ方針。
+    """
+    threshold = _int_setting("tdnet_fail_alert_threshold", 3)
+    streak = _int_setting(_TDNET_FAIL_KEY, 0)
+    alerted = cfg.get(_TDNET_ALERTED_KEY) == "1"
+
+    if tdnet_ok:
+        # 成功。失敗ストリークがあればリセットし、アラート済みなら復旧通知を1通送る。
+        if streak > 0 or alerted:
+            cfg.set_value(_TDNET_FAIL_KEY, "0")
+            cfg.set_value(_TDNET_ALERTED_KEY, "0")
+            if alerted:
+                logger.info("TDnet fetch recovered after %d consecutive failures", streak)
+                mailer.send_collector_recovery(fail_streak=streak, run_at_jst=run_at_jst)
+        return
+
+    # 失敗。ストリークを進め、閾値到達かつ未アラートなら1通だけ送る。
+    streak += 1
+    cfg.set_value(_TDNET_FAIL_KEY, str(streak))
+    logger.warning("TDnet fetch failure streak=%d (alert threshold=%d)", streak, threshold)
+    if streak >= threshold and not alerted:
+        mailer.send_collector_alert(fail_streak=streak, run_at_jst=run_at_jst)
+        cfg.set_value(_TDNET_ALERTED_KEY, "1")
+        logger.error("TDnet fetch alert sent (streak=%d)", streak)
 
 
 def _process_body_targets(targets: list) -> int:
