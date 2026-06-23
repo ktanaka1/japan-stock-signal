@@ -63,8 +63,10 @@ def save_many(articles: list[Article]) -> int:
     TDnet開示は権威ある security_code / security_name を持つ（RSS由来は None）。
     本文取得をしない系統B・非該当でも同定情報は失わず保存する（銘柄同定の権威化）。
     """
-    # D1のREST APIは1クエリ=1リクエストなので、複数行VALUESでラウンドトリップを減らす
-    chunk_size = 30
+    # D1のREST APIは1クエリ=1リクエストなので、複数行VALUESでラウンドトリップを減らす。
+    # ただしD1は1クエリのバインド変数が約100個まで（ローカルSQLiteでは再現しない）。
+    # 1行5列なので 18行=90個に抑える（5列化前は3列×30行=90個だった）。
+    chunk_size = 18
     new_count = 0
     for i in range(0, len(articles), chunk_size):
         chunk = articles[i : i + chunk_size]
