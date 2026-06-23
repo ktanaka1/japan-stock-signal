@@ -82,6 +82,8 @@ def test_incremental_save_on_abort(monkeypatch):
         yield [(arts[4], None), (arts[5], None)]
 
     monkeypatch.setattr(agent, "analyze_batch", fake_batches)
+    # 本テストは逐次保存の検証が目的。コード実在チェック(Yahoo通信)から切り離す。
+    monkeypatch.setattr(agent.quotes, "enrich", lambda stocks: None)
 
     agent.run()
 

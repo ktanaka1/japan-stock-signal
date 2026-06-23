@@ -37,9 +37,19 @@ class Quote:
 
 def get_quote(code: str) -> Optional[Quote]:
     """証券コードの直近終値・前日比%・出来高を返す。取得できなければ None。"""
+    return _get_quote_and_status(code)[0]
+
+
+def _get_quote_and_status(code: str) -> "tuple[Optional[Quote], Optional[int]]":
+    """(Quote, HTTPステータス) を返す。Quote が無ければ None。
+
+    ステータスは証券コードの実在判定に使う（404 = そのコードは Yahoo 上に存在しない）。
+    通信エラー等でステータスが取れない場合は None（= 実在判定不能・transient）を返し、
+    呼び出し側が「実在しない」と誤判定しないようにする。
+    """
     code = (code or "").strip()
     if not code:
-        return None
+        return None, None
     url = _CHART_URL.format(code=code)
     try:
         resp = httpx.get(
@@ -49,23 +59,32 @@ def get_quote(code: str) -> Optional[Quote]:
             timeout=_TIMEOUT,
             follow_redirects=True,
         )
-        if resp.status_code != 200:
-            logger.warning("quote %s: HTTP %s", code, resp.status_code)
-            return None
+    except httpx.RequestError as exc:
+        logger.warning("quote %s: request failed (%s)", code, exc)
+        return None, None
+    if resp.status_code != 200:
+        logger.warning("quote %s: HTTP %s", code, resp.status_code)
+        return None, resp.status_code
+    try:
         series = _drop_unsettled_today(_extract_series(resp.json()))
-        return _build_quote(series) if series else None
-    except (httpx.RequestError, ValueError, KeyError, IndexError, TypeError) as exc:
-        logger.warning("quote %s: failed (%s)", code, exc)
-        return None
+        return (_build_quote(series) if series else None), resp.status_code
+    except (ValueError, KeyError, IndexError, TypeError) as exc:
+        logger.warning("quote %s: parse failed (%s)", code, exc)
+        return None, resp.status_code
 
 
 def enrich(stocks: List[dict]) -> None:
     """銘柄リストの各dictに close/change_pct/volume/asof をインプレースで付与する。
 
     取得できなかった銘柄にはキーを付けない（価格なしのまま）。
+    Yahoo が 404 を返したコード（= 実在しない証券コード）には stock["_nonexistent"]=True を
+    付ける（呼び出し側が捏造コードの除外に使う一時フラグ。保存前に取り除くこと）。
+    404 以外の取得失敗（transient）では付けない＝正しい銘柄を誤って実在しない扱いにしない。
     """
     for stock in stocks:
-        q = get_quote(stock.get("code", ""))
+        q, status = _get_quote_and_status(stock.get("code", ""))
+        if status == 404:
+            stock["_nonexistent"] = True
         if q is None:
             continue
         stock["close"] = q.close

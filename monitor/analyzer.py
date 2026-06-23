@@ -303,7 +303,9 @@ def _mock_analyze(title: str) -> AnalysisResult:
         sentiment="positive",
         summary=f"[DRY RUN] {title[:60]}",
         reason="[DRY RUN] モック判定のため根拠なし。",
-        stocks=[{"name": "サンプル株式会社", "code": "9999"}],
+        # 実在コード(トヨタ)を使う。コード実在チェック(Yahoo 404除外)を通過させ、
+        # DRY_RUN でも配信可能なシグナルになるようにする。
+        stocks=[{"name": "トヨタ自動車", "code": "7203"}],
         impact=4,
     )
 

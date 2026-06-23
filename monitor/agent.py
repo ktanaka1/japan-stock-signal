@@ -63,6 +63,27 @@ def _reconcile_identity(article: object, stocks: list) -> list:
     return stocks
 
 
+def _enrich_and_validate(article: object, stocks: list) -> list:
+    """株価を付与し、Yahooに実在しない(HTTP 404)コードの銘柄を除外する。
+
+    LLMが生成した存在しない証券コード（捏造）を配信前に弾く。ただし:
+      - 404以外（タイムアウト/5xx等のtransient）は実在判定不能として除外しない
+      - TDnet由来の権威コード(security_code)は404でも残す（Yahoo未収録の実在銘柄の誤除外を防ぐ）
+    enrich が付ける一時フラグ _nonexistent はここで全銘柄から取り除く（保存JSONに残さない）。
+    """
+    quotes.enrich(stocks)
+    auth_code = _normalize_security_code(getattr(article, "security_code", None))
+    kept = []
+    for s in stocks:
+        nonexistent = s.pop("_nonexistent", False)
+        if nonexistent and s.get("code") != auth_code:
+            logger.info("Dropping nonexistent code on Yahoo: %s (article %s)",
+                        s.get("code"), getattr(article, "id", None))
+            continue
+        kept.append(s)
+    return kept
+
+
 def _clean_stocks(stocks: list) -> list:
     """銘柄リストから不正なコードの銘柄を除外し、コードを trim して返す。
 
@@ -124,10 +145,14 @@ def run() -> None:
                 not require_stocks or bool(result.stocks)
             )
             if is_signal:
-                # シグナル銘柄のみ株価（終値・前日比%・出来高）を付与する。
-                # result.stocks をインプレースで更新するため、後続の analyses.save も価格付きになる。
-                # 取得失敗は quotes 側で握りつぶされ、価格なしのまま進む。
-                quotes.enrich(result.stocks)
+                # シグナル銘柄に株価（終値・前日比%・出来高）を付与し、Yahooに実在しない
+                # コード（LLM捏造）を配信前に除外する。result.stocks をインプレース更新するため
+                # 後続の analyses.save も同じ内容になる。取得失敗(transient)は価格なしで進む。
+                result.stocks = _enrich_and_validate(article, result.stocks)
+                # 実在コードが全て消えた（捏造のみだった）場合はシグナルにしない。
+                if require_stocks and not result.stocks:
+                    is_signal = False
+            if is_signal:
                 signals.add(
                     article.id, result.sentiment, result.summary, result.stocks, article.url,
                     impact=result.impact,
