@@ -135,4 +135,64 @@
   {% endif %}
 </div>
 
+<div class="card">
+  <h2>捕捉率フィードバック</h2>
+  <p class="text-muted" style="margin:0 0 8px">
+    値上がり率ランキング上位（中小型・非ETF）のうち、当日に拾えていた割合と取りこぼしの内訳。
+  </p>
+  {% if coverage %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>対象日</th>
+          <th>捕捉率</th>
+          <th>母集団</th>
+          <th>配信/未配信/中立/未収集</th>
+          <th>取りこぼし・提案</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in coverage %}
+        <tr>
+          <td style="white-space:nowrap">{{ c.ranking_date }}</td>
+          <td>
+            {% if c.capture_rate is not none %}
+            <strong>{{ '%.0f'|format(c.capture_rate * 100) }}%</strong>
+            {% else %}<span class="text-muted">—</span>{% endif %}
+          </td>
+          <td>{{ c.universe }}</td>
+          <td style="white-space:nowrap">
+            <span class="badge b-pos">{{ c.captured }}</span>
+            <span class="badge b-ntf">{{ c.signaled }}</span>
+            <span class="badge b-none">{{ c.neutral }}</span>
+            <span class="badge b-neg">{{ c.not_collected }}</span>
+          </td>
+          <td>
+            <details>
+              <summary style="cursor:pointer">{{ c.proposal }}</summary>
+              <div class="run-signals">
+                {% for d in c.detail if d.in_universe and d.status != 'delivered' %}
+                <div class="run-signal text-muted" style="font-size:0.85rem">
+                  #{{ d.rank }} {{ d.name }}({{ d.code }})
+                  {% if d.pct is not none %}+{{ d.pct }}%{% endif %}
+                  —
+                  {% if d.status == 'signaled_not_delivered' %}拾ったが未配信
+                  {% elif d.status == 'analyzed_neutral' %}中立で落とした
+                  {% else %}未収集{% endif %}
+                </div>
+                {% endfor %}
+              </div>
+            </details>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-muted" style="margin:0">捕捉率の記録はまだありません（引け後の feedback ジョブで生成）。</p>
+  {% endif %}
+</div>
+
 {% endblock %}

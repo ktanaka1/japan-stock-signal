@@ -125,12 +125,21 @@ async def dashboard(request: Request, msg: str = None, stats_page: int = 0):
         # 配信したシグナルの内容（銘柄・要約・URL）を復元して展開表示できるようにする
         run["signals"] = signals.get_by_ids(run.get("notified_ids") or [])
 
+    # 捕捉率フィードバック（読み取りのみ。テーブル未作成・取得失敗でもダッシュボードを壊さない）
+    coverage = []
+    try:
+        from store import coverage_runs
+        coverage = coverage_runs.get_recent(20)
+    except Exception:
+        logger.warning("coverage_runs unavailable; skip section", exc_info=True)
+
     return templates.TemplateResponse("index.html", {
         "request": request,
         "daily_stats": daily_stats,
         "stats_page": stats_page,
         "has_older": has_older,
         "runs": runs,
+        "coverage": coverage,
         "msg": msg,
         "pipeline_running": _pipeline_running,
     })
