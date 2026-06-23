@@ -179,6 +179,27 @@ def test_max_articles_per_run_limit():
 
 
 # --------------------------------------------------------------------------
+# fetcher: TDnet取得 limit の設定反映（窓溢れ対策）
+# --------------------------------------------------------------------------
+def test_tdnet_fetch_uses_configured_limit(monkeypatch):
+    """_fetch_tdnet_json は settings.tdnet_fetch_limit を URL に反映する。"""
+    _fresh_db()
+    from collector import fetcher
+    from store import settings as cfg
+
+    cfg.set_value("tdnet_fetch_limit", "300")
+    captured = {}
+
+    def fake_get_json(url):
+        captured["url"] = url
+        return {"items": []}
+
+    monkeypatch.setattr(fetcher, "_http_get_json", fake_get_json)
+    fetcher._fetch_tdnet_json()
+    assert "limit=300" in captured["url"]
+
+
+# --------------------------------------------------------------------------
 # fetcher: リトライ例外の修正
 # --------------------------------------------------------------------------
 def test_fetcher_404_no_retry(monkeypatch):

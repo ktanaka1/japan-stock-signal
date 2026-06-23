@@ -74,6 +74,8 @@ DEFAULTS: dict[str, str] = {
     "exclude_large_cap": "true",
     # TDnet取得がこの回数連続で失敗したら障害アラートメールを送る（collector）。
     "tdnet_fail_alert_threshold": "3",
+    # TDnet(やのしん)から1回に取得する開示件数。引け後の窓溢れ対策で既定300。
+    "tdnet_fetch_limit": "300",
 }
 
 

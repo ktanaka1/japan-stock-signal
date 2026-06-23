@@ -10,7 +10,10 @@ from store.models import Article
 logger = logging.getLogger(__name__)
 
 # やのしんWEB-API（TDnet）。RSS→JSON に切替（document_url/company_code/url_xbrl を得るため）。
-_TDNET_JSON_URL = "https://webapi.yanoshin.jp/webapi/tdnet/list/recent.json?limit=100"
+# limit は settings.tdnet_fetch_limit（既定300）で可変。引け後(15時台)は開示が集中し
+# 直近100件では1時間の取得間に溢れる（窓溢れ）ため、窓を広げて取りこぼしを防ぐ。
+_TDNET_JSON_URL = "https://webapi.yanoshin.jp/webapi/tdnet/list/recent.json?limit={limit}"
+_TDNET_LIMIT_DEFAULT = 300
 # 従来RSS（系統B扱い・本文取得しない）
 _DEFAULT_RSS_FEEDS = [
     "https://news.yahoo.co.jp/rss/topics/business.xml",
@@ -73,7 +76,13 @@ def _fetch_tdnet_json() -> list[Article]:
     Article(title, body, url) は従来どおり生成（url は開示PDFページ）。
     系統A該当開示には取得メタを横付けする。
     """
-    data = _http_get_json(_TDNET_JSON_URL)
+    from store import settings as cfg
+
+    try:
+        limit = int(cfg.get("tdnet_fetch_limit"))
+    except (TypeError, ValueError):
+        limit = _TDNET_LIMIT_DEFAULT
+    data = _http_get_json(_TDNET_JSON_URL.format(limit=limit))
     items = data.get("items") or [] if isinstance(data, dict) else []
 
     articles: list[Article] = []
