@@ -310,3 +310,41 @@ def get_stats_recent_days(days: int = 3, page: int = 0) -> tuple[list[dict], boo
         for d in dates
     ]
     return stats, has_older
+
+
+def purge_disposable(retention_days: int = 90) -> dict:
+    """価値の低い記事を保持期間経過後に削除する（データ保持・ローテーション）。
+
+    削除対象は「sentiment='neutral' かつ 銘柄なし('[]'/'') かつ fetched_at が
+    retention_days より古い」記事のみ。signals に紐づくもの（成果物）は二重防御で除外する。
+    まず該当する article_analyses を消し、続いて分析もシグナルも無い古い既読記事を消す。
+    silent な削除を避けるため削除件数を返す（呼び出し側でログ化する）。
+    """
+    cutoff = f"-{int(retention_days)} days"
+    analyses_deleted = execute(
+        """
+        DELETE FROM article_analyses
+        WHERE sentiment = 'neutral'
+          AND stocks IN ('[]', '')
+          AND article_id NOT IN (SELECT article_id FROM signals)
+          AND article_id IN (
+              SELECT id FROM articles WHERE fetched_at < datetime('now', ?)
+          )
+        """,
+        (cutoff,),
+    ).changes
+    articles_deleted = execute(
+        """
+        DELETE FROM articles
+        WHERE fetched_at < datetime('now', ?)
+          AND is_read = 1
+          AND id NOT IN (SELECT article_id FROM signals)
+          AND id NOT IN (SELECT article_id FROM article_analyses)
+        """,
+        (cutoff,),
+    ).changes
+    return {
+        "retention_days": int(retention_days),
+        "analyses_deleted": analyses_deleted,
+        "articles_deleted": articles_deleted,
+    }

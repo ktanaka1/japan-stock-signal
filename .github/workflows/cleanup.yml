@@ -1,0 +1,26 @@
+# データ保持・ローテーション役: 中立かつ銘柄なしで保持期間(既定90日)を過ぎた記事を削除
+# 週次・低トラフィック帯に実行。cronはUTC指定: JST 日曜 23:00 = UTC 日曜 14:00
+# GitHub Actionsのcronは遅延・スキップがあるが、掃除は時刻が厳密でなくてよい
+name: cleanup
+
+on:
+  schedule:
+    - cron: "0 14 * * 0"
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python -m maintenance.cleanup
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_D1_DATABASE_ID: ${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
