@@ -17,6 +17,9 @@ JST = timezone(timedelta(hours=9))
 
 _COOKIE_NAME = "admin_session"
 _COOKIE_MAX_AGE = 60 * 60 * 24 * 30  # 30日
+# 株価フィルタの直近入力値を記憶するCookie（次回クエリ無しアクセス時に復元）
+_PRICE_MIN_COOKIE = "flt_price_min"
+_PRICE_MAX_COOKIE = "flt_price_max"
 _PER_PAGE = 50
 _PER_PAGE_OPTIONS = [20, 50, 100, 200]
 _DASHBOARD_DAYS = 3  # ダッシュボードのパイプライン統計の表示日数
@@ -161,6 +164,12 @@ async def articles_view(
     if not _is_authed(request):
         return _login_redirect()
 
+    # クエリ無し（ブックマーク/メニューからの素のアクセス）なら株価フィルタを前回値で復元。
+    # フォーム送信やページャ経由はクエリが付くので、その場合は明示値（空=クリア）を尊重する。
+    if not request.query_params:
+        price_min = request.cookies.get(_PRICE_MIN_COOKIE, "")
+        price_max = request.cookies.get(_PRICE_MAX_COOKIE, "")
+
     page = max(1, page)
     if per_page not in _PER_PAGE_OPTIONS:
         per_page = _PER_PAGE
@@ -207,7 +216,7 @@ async def articles_view(
     for row in rows:
         row["fetched_at_jst"] = _to_jst_time(row.get("fetched_at", "") or "")
 
-    return templates.TemplateResponse("articles.html", {
+    resp = templates.TemplateResponse("articles.html", {
         "request": request,
         "date": date,
         "year": year,
@@ -227,6 +236,10 @@ async def articles_view(
         "end": end,
         "articles": rows,
     })
+    # 今回の株価フィルタ値を記憶（空送信=クリアもそのまま空で保存）
+    resp.set_cookie(_PRICE_MIN_COOKIE, price_min, max_age=_COOKIE_MAX_AGE, httponly=True, samesite="lax")
+    resp.set_cookie(_PRICE_MAX_COOKIE, price_max, max_age=_COOKIE_MAX_AGE, httponly=True, samesite="lax")
+    return resp
 
 
 @router.get("/settings", response_class=HTMLResponse)

@@ -19,6 +19,12 @@
     .card { background: white; border-radius: 8px; padding: 20px 24px; margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.07); max-width: 100%; }
     /* テーブルがカード幅を超えたらカード内部で横スクロール（ページ全体は揺らさない） */
     .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    /* 株価フィルタのプリセット（クイック選択） */
+    .preset { font-size: 0.78rem; padding: 2px 8px; margin-left: 4px; border: 1px solid #ccd; border-radius: 12px; background: #fff; color: #556; cursor: pointer; line-height: 1.6; }
+    .preset:hover { background: #eef; border-color: #aab; }
+    .preset.active { background: #1a1a2e; border-color: #1a1a2e; color: #fff; }
+    .preset.preset-clear { color: #a44; border-color: #e0bcbc; }
+    .preset.preset-clear:hover { background: #fbeaea; }
     .card h2 { margin: 0 0 16px; font-size: 0.8rem; color: #888; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
     .stats { display: flex; gap: 40px; flex-wrap: wrap; }
     .stat .n { font-size: 2rem; font-weight: 700; line-height: 1; }

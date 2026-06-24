@@ -86,8 +86,21 @@
           onkeydown="if(event.key==='Enter'){event.preventDefault(); this.form.submit();}" onchange="this.form.submit()" style="width:70px">〜
         <input type="text" name="price_max" value="{{ price_max }}" placeholder="上限" inputmode="numeric"
           onkeydown="if(event.key==='Enter'){event.preventDefault(); this.form.submit();}" onchange="this.form.submit()" style="width:70px">円
+        {% macro preset(lo, hi, label) %}
+        <button type="button" class="preset{% if price_min|string == lo|string and price_max|string == hi|string %} active{% endif %}"
+          onclick="setPrice(this,'{{ lo }}','{{ hi }}')">{{ label }}</button>
+        {% endmacro %}
+        {{ preset('', 500, '〜500') }}{{ preset(500, 1500, '500〜1500') }}{{ preset(1500, 3000, '1500〜3000') }}{{ preset(3000, '', '3000〜') }}
+        {% if price_min or price_max %}<button type="button" class="preset preset-clear" onclick="setPrice(this,'','')">クリア</button>{% endif %}
       </span>
     </form>
+    <script>
+      function setPrice(btn, min, max){
+        var f = btn.form;
+        f.price_min.value = min; f.price_max.value = max;
+        f.submit();
+      }
+    </script>
     <span class="text-muted count">
       {% if not total %}0件{% elif articles %}{{ start }}〜{{ end }} 件目 / {{ total }}件{% else %}全{{ total }}件{% endif %}
     </span>
