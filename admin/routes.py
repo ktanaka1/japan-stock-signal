@@ -270,6 +270,8 @@ async def settings_save(
     max_consecutive_failures: str = Form("3"),
     body_max_chars: str = Form("4000"),
     max_articles_per_run: str = Form("200"),
+    tdnet_title_prefilter_enabled: str = Form(None),
+    tdnet_title_prefilter_denylist: str = Form(""),
 ):
     if not _is_authed(request):
         return _login_redirect()
@@ -291,6 +293,8 @@ async def settings_save(
         "max_consecutive_failures": max_consecutive_failures.strip() or "3",
         "body_max_chars": body_max_chars.strip() or "4000",
         "max_articles_per_run": max_articles_per_run.strip() or "200",
+        "tdnet_title_prefilter_enabled": "true" if tdnet_title_prefilter_enabled else "false",
+        "tdnet_title_prefilter_denylist": tdnet_title_prefilter_denylist.strip(),
     })
 
     return RedirectResponse("/admin/settings?msg=設定を保存しました", status_code=303)

@@ -101,6 +101,45 @@ def _clean_stocks(stocks: list) -> list:
     return cleaned
 
 
+def _is_prefiltered_tdnet(article: object, denylist: list) -> bool:
+    """TDnet開示のうち、タイトルが非材料の定型開示に該当するか（LLMに掛けず除外）。
+
+    TDnet開示（url が tdnet.info）にのみ適用する。RSSニュースは対象外（タイトルが
+    多様で誤除外のリスクが高いため）。捕捉率を下げないよう denylist は保守的に保つ。
+    """
+    if "tdnet.info" not in (getattr(article, "url", "") or "").lower():
+        return False
+    title = getattr(article, "title", "") or ""
+    return any(kw and kw in title for kw in denylist)
+
+
+def _apply_title_prefilter(articles: list, settings: dict) -> list:
+    """事前フィルタが有効なら、非材料の定型TDnet開示をLLM前に除外して既読化する。
+
+    除外分は neutral・銘柄なしの分析として確定（既読化）し、未読バックログから外す。
+    silent な除外を避けるため件数をログ出力する。戻り値は分析対象として残す記事。
+    """
+    if settings.get("tdnet_title_prefilter_enabled", "false").lower() != "true":
+        return articles
+    denylist = [k.strip() for k in settings.get("tdnet_title_prefilter_denylist", "").splitlines() if k.strip()]
+    if not denylist:
+        return articles
+
+    to_analyze, filtered = [], []
+    for a in articles:
+        (filtered if _is_prefiltered_tdnet(a, denylist) else to_analyze).append(a)
+    if filtered:
+        for a in filtered:
+            analyses.save(
+                a.id, "neutral", a.title,
+                "事前フィルタ: 非材料の定型開示（タイトル該当）でLLM分析をスキップ",
+                [], False, impact=1,
+            )
+        repository.mark_many_as_read([a.id for a in filtered])
+        logger.info("Pre-filtered %d non-material TDnet disclosures by title (LLM skipped)", len(filtered))
+    return to_analyze
+
+
 def run() -> None:
     migrate()
     settings = cfg.get_all()
@@ -110,6 +149,12 @@ def run() -> None:
     articles = repository.get_unread(limit=int(settings["max_articles_per_run"]))
     if not articles:
         logger.info("No unread articles")
+        return
+
+    # TDnetタイトル事前フィルタ（既定OFF）。非材料の定型開示をLLM前に除外し枠を節約する。
+    articles = _apply_title_prefilter(articles, settings)
+    if not articles:
+        logger.info("No unread articles to analyze after prefilter")
         return
 
     logger.info("Analyzing %d unread articles", len(articles))

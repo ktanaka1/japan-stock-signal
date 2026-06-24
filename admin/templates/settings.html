@@ -50,6 +50,17 @@
       <label>RSSフィードURL<br><small>1行1URL。次回の収集から反映されます。</small></label>
       <textarea name="rss_feeds" rows="6">{{ settings.rss_feeds }}</textarea>
     </div>
+    <div class="form-group">
+      <div class="checkbox-group">
+        <label>
+          <input type="checkbox" name="tdnet_title_prefilter_enabled" value="1"
+            {% if settings.tdnet_title_prefilter_enabled == 'true' %}checked{% endif %}>
+          TDnetタイトル事前フィルタを有効にする
+        </label>
+      </div>
+      <small>ONにすると、下のキーワードにタイトルが部分一致するTDnet開示をLLM分析前に除外し、Gemini枠と未読バックログを節約します。<strong>捕捉率を下げないよう、材料性のない定型開示のみを保守的に列挙してください</strong>（修正・決算・配当・提携等は入れない）。RSSニュースには適用されません。</small>
+      <textarea name="tdnet_title_prefilter_denylist" rows="6" style="margin-top:6px">{{ settings.tdnet_title_prefilter_denylist }}</textarea>
+    </div>
   </div>
 
   <div class="card">

@@ -55,6 +55,22 @@ _BODY_FETCH_TRIGGERS_CATALYST_DEFAULT = "\n".join([
     "子会社化", "株式交換", "主要株主の異動", "減損", "特別損失",
 ])
 
+# TDnetタイトル事前フィルタの保守的デナイリスト（タイトル部分一致で非材料の定型開示を除外）。
+# デイトレのシグナルになり得ない定型・手続き的開示のみに絞る。材料性のある修正・決算・配当・
+# 提携等は決して入れない（捕捉率を下げないため）。改行区切り。
+_TDNET_TITLE_DENYLIST_DEFAULT = "\n".join([
+    "コーポレート・ガバナンスに関する報告書",
+    "独立役員届出書",
+    "内部統制報告書",
+    "有価証券報告書",
+    "四半期報告書",
+    "株主総会招集",
+    "定時株主総会",
+    "自己株券買付状況報告書",
+    "決算説明会",
+    "補足説明資料",
+])
+
 DEFAULTS: dict[str, str] = {
     "gemini_model": "gemini-2.5-flash",
     "gemini_system_prompt": _SYSTEM_PROMPT_DEFAULT,
@@ -83,6 +99,10 @@ DEFAULTS: dict[str, str] = {
     "tech_dedup_with_news": "true",    # 本体ニュース版で当日配信済みの銘柄を除外するか
     # データ保持: 中立かつ銘柄なしの記事をこの日数経過後に削除する（maintenance.cleanup）。
     "retention_days": "90",
+    # TDnetタイトル事前フィルタ: 非材料の定型開示をLLMに掛けず除外し、Gemini枠/未読バックログを節約。
+    # 既定OFF（捕捉率への影響を避けるため）。ON時のみ denylist のタイトル部分一致で除外する。
+    "tdnet_title_prefilter_enabled": "false",
+    "tdnet_title_prefilter_denylist": _TDNET_TITLE_DENYLIST_DEFAULT,
 }
 
 
