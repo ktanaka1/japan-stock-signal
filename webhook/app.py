@@ -41,7 +41,9 @@ app = FastAPI(lifespan=lifespan)
 app.include_router(admin_router)
 
 
-@app.get("/health")
+# GET だけでなく HEAD も受ける。死活監視サービス（UptimeRobot 等）は既定で HEAD を
+# 送るため、GET 専用だと 405 を返してしまう。D1 は触らない静的応答に保つ（ADR-005）。
+@app.api_route("/health", methods=["GET", "HEAD"])
 async def health():
     return {"status": "ok"}
 
