@@ -145,7 +145,8 @@
         <td style="font-size:0.82rem; white-space:nowrap">
           {% for s in a.stocks %}
             <div style="margin-bottom:3px">
-              {{ s.name }}<br><span class="text-muted">{{ s.code }}</span>
+              {{ s.name }}<br>
+              <a class="text-muted" href="https://finance.yahoo.co.jp/quote/{{ s.code }}.T" target="_blank" rel="noopener" title="Yahoo!ファイナンスでチャートを開く">📈 {{ s.code }}</a>
               {% set p = price_str(s)|trim %}
               {% if p %}<br><span class="text-muted" style="font-size:0.8rem">📊 {{ p }}</span>{% endif %}
             </div>

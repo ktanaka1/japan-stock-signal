@@ -151,6 +151,16 @@ def format_price(stock: dict) -> str:
     return f"{close:,.0f}円"
 
 
+def chart_page_url(code: str) -> str:
+    """証券コードから Yahoo!ファイナンス（日本）のチャートページURLを返す。
+
+    配信メッセージや管理画面に貼るタップ可能なリンク用（データAPIの _CHART_URL とは別）。
+    コードは4桁数字/新形式英数（例 376A）。東証銘柄なので '.T' を付ける。
+    """
+    code = str(code or "").strip()
+    return f"https://finance.yahoo.co.jp/quote/{code}.T" if code else ""
+
+
 def get_quote_asof(code: str, date_str: str) -> Optional[Quote]:
     """指定日(JST, 'YYYY-MM-DD')時点の終値・前日比%・出来高を返す。
 

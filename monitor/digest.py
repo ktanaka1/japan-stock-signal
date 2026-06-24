@@ -197,6 +197,9 @@ def _format_item(signal: dict) -> str:
         price = quotes.format_price(s)
         if price:
             lines.append(f"　📊 {price}")
+        chart = quotes.chart_page_url(s.get("code"))
+        if chart:
+            lines.append(f"　📈 {chart}")
     lines.append(f"　{signal['summary']}")
     lines.append(f"　{signal['url']}")
     return "\n".join(lines)
