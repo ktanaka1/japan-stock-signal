@@ -19,18 +19,23 @@ def record(
     capture_rate: Optional[float],
     detail: list,
     proposal: str,
+    captured_tech: int = 0,
 ) -> int:
-    """捕捉率の計測結果を1行記録し、採番された id を返す。"""
+    """捕捉率の計測結果を1行記録し、採番された id を返す。
+
+    captured はニュース版の配信件数、captured_tech はテクニカル版の配信件数。
+    capture_rate は両者の合算/母集団。
+    """
     result = execute(
         """
         INSERT INTO coverage_runs
-            (ranking_date, ranking_type, top_n, universe, captured, signaled,
-             neutral, not_collected, capture_rate, detail, proposal)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (ranking_date, ranking_type, top_n, universe, captured, captured_tech,
+             signaled, neutral, not_collected, capture_rate, detail, proposal)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
-            ranking_date, ranking_type, top_n, universe, captured, signaled,
-            neutral, not_collected, capture_rate,
+            ranking_date, ranking_type, top_n, universe, captured, captured_tech,
+            signaled, neutral, not_collected, capture_rate,
             json.dumps(detail, ensure_ascii=False), proposal,
         ),
     )
@@ -42,7 +47,8 @@ def get_recent(limit: int = 30) -> List[dict]:
     rows = execute(
         """
         SELECT id, run_at, ranking_date, ranking_type, top_n, universe,
-               captured, signaled, neutral, not_collected, capture_rate, detail, proposal
+               captured, captured_tech, signaled, neutral, not_collected,
+               capture_rate, detail, proposal
         FROM coverage_runs
         ORDER BY ranking_date DESC, id DESC
         LIMIT ?

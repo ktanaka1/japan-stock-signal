@@ -135,10 +135,13 @@ LLMが生成した社名のハルシネーション（コードは正でも社�
 
 - 引け後に値上がり率ランキング上位30（中小型・非ETF）を取得（`feedback/ranking.py`、Yahoo の
   `__PRELOADED_STATE__` を httpx 取得）し、自システムの当日処理と突き合わせる
-- 各銘柄を `delivered`（配信済）/ `signaled_not_delivered`（拾ったが未配信）/ `analyzed_neutral`
-  （分析したが中立で落とした）/ `not_collected`（収集網の外）に分類
-- **捕捉率**（delivered / 母集団）を時系列で記録し、支配的な取りこぼしクラスから改善レバー
-  （収集網拡張・中立基準見直し・閾値チューニング 等）を提案する。`coverage_runs` に保存し管理画面に表示
+- 各銘柄を `delivered`（ニュース版で配信済）/ `delivered_technical`（テクニカル版で配信済）/
+  `signaled_not_delivered`（拾ったが未配信）/ `analyzed_neutral`（分析したが中立で落とした）/
+  `not_collected`（収集網の外）に分類
+- **捕捉率**は2チャンネル合算（(delivered + delivered_technical) / 母集団）。テクニカル版は寄り前に
+  実行されFB窓の内側に入るため、配信成功(`line_ok>0`)した `technical_runs` の picks を合算する
+  （`captured_tech` に別記録）。支配的な取りこぼしクラスから改善レバー（収集網拡張・中立基準見直し・
+  閾値チューニング 等）を提案し、`coverage_runs` に保存して管理画面に表示
 - 出力は助言で、ロジックは自動変更しない（人が判断して別途反映）
 
 ## テクニカル版 朝のシグナル（価格/出来高駆動の別系統）
@@ -160,7 +163,7 @@ LLMが生成した社名のハルシネーション（コードは正でも社�
 | signals | 検出したシグナル | article_id(UNIQUE), sentiment, summary, stocks(JSON・終値等を含む), url, impact(1〜5), created_at, notified_at |
 | article_analyses | 分析結果（一覧/絞り込み用） | article_id(UNIQUE), sentiment, summary, reason, stocks(JSON), became_signal, impact |
 | digest_runs | 配信実行ログ | status, signal_count, line_ok/error, error_detail, notified_ids(JSON), run_at |
-| coverage_runs | 捕捉率フィードバックの記録 | ranking_date, ranking_type, top_n, universe, captured/signaled/neutral/not_collected, capture_rate, detail(JSON), proposal |
+| coverage_runs | 捕捉率フィードバックの記録 | ranking_date, ranking_type, top_n, universe, captured/captured_tech/signaled/neutral/not_collected, capture_rate, detail(JSON), proposal |
 | technical_runs | テクニカル版の配信記録 | target_date, status, pick_count, line_ok/error, picks(JSON), error_detail |
 | recipients | LINE受信者 | line_user_id(UNIQUE), followed_at |
 

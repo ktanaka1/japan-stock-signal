@@ -54,8 +54,8 @@ def run() -> None:
         return
 
     since_utc, until_utc = _window(now)
-    delivered, filtered, analyzed = matcher.load_window(since_utc, until_utc)
-    detail = matcher.classify(items, delivered, filtered, analyzed)
+    delivered, filtered, analyzed, tech_delivered = matcher.load_window(since_utc, until_utc)
+    detail = matcher.classify(items, delivered, filtered, analyzed, tech_delivered)
     summary = matcher.count_universe(detail)
     counts = summary["counts"]
     proposal = proposals.build_proposal(counts, summary["capture_rate"])
@@ -66,6 +66,7 @@ def run() -> None:
         top_n=_TOP_N,
         universe=summary["universe"],
         captured=counts[matcher.STATUS_DELIVERED],
+        captured_tech=counts[matcher.STATUS_DELIVERED_TECH],
         signaled=counts[matcher.STATUS_SIGNALED],
         neutral=counts[matcher.STATUS_NEUTRAL],
         not_collected=counts[matcher.STATUS_NOT_COLLECTED],

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from feedback.matcher import (
+    STATUS_DELIVERED_TECH,
     STATUS_SIGNALED,
     STATUS_NEUTRAL,
     STATUS_NOT_COLLECTED,
@@ -29,12 +30,17 @@ _LEVERS = {
 
 
 def build_proposal(counts: dict, capture_rate) -> str:
-    """status別件数(母集団)から、支配的な取りこぼしクラスと推奨レバーのサマリを作る。"""
+    """status別件数(母集団)から、支配的な取りこぼしクラスと推奨レバーのサマリを作る。
+
+    捕捉率はニュース版・テクニカル版の2チャンネル合算。内訳でテクニカル版の寄与を明示する。
+    """
     misses = {k: counts.get(k, 0) for k in _LEVERS}
     total_miss = sum(misses.values())
     rate_s = f"{capture_rate * 100:.0f}%" if capture_rate is not None else "—"
+    tech = counts.get(STATUS_DELIVERED_TECH, 0)
+    tech_s = f"（うちテクニカル版 {tech}件）" if tech else ""
     if total_miss == 0:
-        return f"捕捉率 {rate_s}。母集団の取りこぼしなし。"
+        return f"捕捉率 {rate_s}{tech_s}。母集団の取りこぼしなし。"
 
     dominant = max(misses, key=lambda k: misses[k])
     label, lever = _LEVERS[dominant]
@@ -42,6 +48,6 @@ def build_proposal(counts: dict, capture_rate) -> str:
         f"{_LEVERS[k][0]}:{misses[k]}" for k in _LEVERS if misses[k]
     )
     return (
-        f"捕捉率 {rate_s}。取りこぼし内訳[{breakdown}]。"
+        f"捕捉率 {rate_s}{tech_s}。取りこぼし内訳[{breakdown}]。"
         f"支配要因＝『{label}』({misses[dominant]}件) → 推奨レバー: {lever}"
     )
