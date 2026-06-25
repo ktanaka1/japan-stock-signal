@@ -132,11 +132,15 @@
   var skip = Math.ceil(n / 14);
   axis.forEach(function(d, i){ if (i % skip === 0 || i === n - 1) ctx.fillText(d, X(i), H - padB + 12); });
   // lines
-  DATA.rules.forEach(function(r){
+  // ③と④は「損切りライン」有無の差だけで系列が大半重なるため、線ごとに微小な縦オフセット
+  // （約±数px）を与えて重なっても4本全て見えるようにする。値の歪みは¥1k未満で無視できる範囲。
+  var nr = DATA.rules.length;
+  DATA.rules.forEach(function(r, ri){
+    var off = (ri - (nr - 1) / 2) * 2.6;
     ctx.beginPath();
-    r.series.forEach(function(v, i){ var x = X(i), y = Y(v); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+    r.series.forEach(function(v, i){ var x = X(i), y = Y(v) + off; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
     ctx.strokeStyle = r.color; ctx.lineWidth = 2.5; ctx.lineJoin = "round"; ctx.stroke();
-    var ex = X(n - 1), ey = Y(r.series[n - 1]);
+    var ex = X(n - 1), ey = Y(r.series[n - 1]) + off;
     ctx.fillStyle = r.color; ctx.beginPath(); ctx.arc(ex, ey, 4, 0, 7); ctx.fill();
     ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.font = "bold 19px ui-monospace,monospace";
     ctx.fillText(yen(r.series[n - 1]), ex + 8, ey);

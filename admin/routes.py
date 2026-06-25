@@ -132,7 +132,17 @@ async def dashboard(request: Request, msg: str = None, stats_page: int = 0):
     coverage = []
     try:
         from store import coverage_runs
-        coverage = coverage_runs.get_recent(20)
+        # 同一営業日に feedback が複数回走ると行が重複するため、対象日ごと最新1件だけ表示する。
+        # get_recent は ranking_date DESC, id DESC 順なので、各日の先頭＝最新を採用。
+        seen_dates = set()
+        for c in coverage_runs.get_recent(60):
+            d = c.get("ranking_date")
+            if d in seen_dates:
+                continue
+            seen_dates.add(d)
+            coverage.append(c)
+            if len(coverage) >= 20:
+                break
     except Exception:
         logger.warning("coverage_runs unavailable; skip section", exc_info=True)
 
