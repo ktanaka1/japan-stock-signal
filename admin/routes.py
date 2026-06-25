@@ -148,6 +148,34 @@ async def dashboard(request: Request, msg: str = None, stats_page: int = 0):
     })
 
 
+@router.get("/backtest", response_class=HTMLResponse)
+async def backtest_view(request: Request):
+    """元本シミュレーション: 実配信シグナルを各ルールで約定した場合の元本推移を表示する。
+
+    引け後 cron（python -m backtest.agent）が記録した最新スナップショットを読むだけ。
+    Yahoo は叩かない（高速）。テーブル未作成・記録なしでも画面を壊さない。
+    """
+    if not _is_authed(request):
+        return _login_redirect()
+
+    snapshot = None
+    run_at_jst = ""
+    try:
+        from store import backtest_runs
+        latest = backtest_runs.get_latest()
+        if latest:
+            snapshot = latest.get("snapshot")
+            run_at_jst = _to_jst_time(latest.get("run_at", "") or "")
+    except Exception:
+        logger.warning("backtest_runs unavailable; skip section", exc_info=True)
+
+    return templates.TemplateResponse("backtest.html", {
+        "request": request,
+        "snapshot": snapshot,
+        "run_at_jst": run_at_jst,
+    })
+
+
 @router.get("/articles", response_class=HTMLResponse)
 async def articles_view(
     request: Request,

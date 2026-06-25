@@ -155,6 +155,22 @@ LLMが生成した社名のハルシネーション（コードは正でも社�
 - 本体（✅/❌＋🔥）と区別した「📊 テクニカル注目」LINE。値動きが主役なので前日比%・出来高倍率を明示
 - 閾値は settings（`tech_min_change_pct` / `tech_min_volume_surge` / `tech_top_n` / `tech_dedup_with_news`）で調整可。`technical_runs` に配信記録
 
+## 元本シミュレーション（バックテスト計測系）
+
+実際に配信したシグナル（`signals` notified_at済み・impact≥4）を、その後の実株価（Yahoo Finance 確定日足）で
+各取引ルールに沿って約定したと仮定し、**元本の日次推移**を引け後 cron で再計算して管理画面に表示する
+（`backtest/` パッケージ・平日 引け後 JST 16:35 cron）。捕捉率FB同様の外付け計測器で、本体ロジックには触れない。
+
+- **4ルール**を比較（共通: 基準終値asofの翌営業日寄りで建玉・手数料往復0.2%・元本¥1,000,000を建玉日ごと等配分で複利）:
+  - ① 順張り（全シグナル・買い・当日引け） ② 逆張り（GU+1%↑を成り売り・当日引け）
+  - ③ ②＋陰線5%利確（最大5営業日） ④ ③＋建値比−7%損切りライン（**現時点の最適**：最大損を抑えつつ最良元本）
+- 探索の知見（2026-06-10〜の実配信で検証）: 勝ち筋は「**逆張り×ギャップアップのみ**」。順張り・GD押し目買いは負け。
+  利は陰線まで伸ばし、損は**単日の足ではなく“建値比−7%の累積ライン”**で切ると“じわ上げ”の大火傷を防げる。
+- `backtest/agent.py` が signals を読み（読み取りのみ）ユニーク銘柄の日足OHLCを取得→計算→`backtest_runs` に
+  スナップショット(JSON)を1行記録。**管理画面 `/admin/backtest` は最新スナップショットを読むだけ**（Yahoo非依存＝高速）。
+  場中（15:10 JST前）の当日未確定足は除外するため、引け後cronで日々確定・更新される。
+- 注意: 少数データ（最適解は過剰最適化を含む“仮説”）／空売りは信用売建可に限る・単元株/スリッページ未考慮の理論値。
+
 ## ストア（Cloudflare D1）
 
 | テーブル | 役割 | 主なカラム |
@@ -165,6 +181,7 @@ LLMが生成した社名のハルシネーション（コードは正でも社�
 | digest_runs | 配信実行ログ | status, signal_count, line_ok/error, error_detail, notified_ids(JSON), run_at |
 | coverage_runs | 捕捉率フィードバックの記録 | ranking_date, ranking_type, top_n, universe, captured/captured_tech/signaled/neutral/not_collected, capture_rate, detail(JSON), proposal |
 | technical_runs | テクニカル版の配信記録 | target_date, status, pick_count, line_ok/error, picks(JSON), error_detail |
+| backtest_runs | 元本シミュレーションの実行記録 | as_of, start_capital, snapshot(JSON・全ルールの日次エクイティ＋④明細) |
 | recipients | LINE受信者 | line_user_id(UNIQUE), followed_at |
 
 - D1はSQLite互換。store層は `CLOUDFLARE_*` 環境変数があればD1 REST API、なければローカルSQLite（開発用）

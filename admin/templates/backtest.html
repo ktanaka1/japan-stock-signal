@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}元本シミュレーション | 株シグナル 管理{% endblock %}
+{% block content %}
+
+{% if not snapshot %}
+<div class="card">
+  <h2>元本シミュレーション</h2>
+  <p>まだ計算記録がありません。引け後 cron（<code>python -m backtest.agent</code>）が初回実行されると、
+     実際に配信したシグナルを各取引ルールで約定した場合の元本推移がここに表示されます。</p>
+</div>
+{% else %}
+
+<div class="card">
+  <h2>元本シミュレーション（実配信シグナル × 実株価）</h2>
+  <p style="color:#888; margin:-6px 0 18px; font-size:0.86rem;">
+    元本 ¥{{ "{:,}".format(snapshot.start_capital) }} を、実際にLINE配信したシグナル（impact≥4・
+    {{ snapshot.universe.codes }}銘柄）に各ルールで約定したと仮定して複利運用。手数料 往復{{ snapshot.params.fee_round_pct }}%込み。
+    <br>最終更新 {{ run_at_jst }} JST ／ 基準日 {{ snapshot.as_of }}（毎営業日 引け後に自動再計算）
+  </p>
+
+  <!-- ルール別サマリ -->
+  <div class="bt-summary">
+    {% for r in snapshot.rules %}
+    <div class="bt-card">
+      <span class="bt-swatch" style="background:{{ r.color }}"></span>
+      <div class="bt-label">{{ r.label }}</div>
+      <div class="bt-cap" style="color:{{ '#28a745' if r.ret_pct >= 0 else '#dc3545' }}">
+        ¥{{ "{:,}".format(r.cap) }}
+      </div>
+      <div class="bt-pct" style="color:{{ '#28a745' if r.ret_pct >= 0 else '#dc3545' }}">
+        {{ "%+.1f"|format(r.ret_pct) }}%
+      </div>
+      <div class="bt-meta">{{ r.n }}件 ／ 勝率{{ r.win }}% ／ 平均{{ "%+.2f"|format(r.avg_pct) }}%</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="card">
+  <h2>資産推移（日次）</h2>
+  <div class="table-wrap">
+    <canvas id="bt-chart" width="1680" height="640" role="img"
+      aria-label="各取引ルールの元本日次推移チャート"></canvas>
+  </div>
+</div>
+
+<div class="card">
+  <h2>④ 逆張り＋損切りライン トレード明細（益順）</h2>
+  <p style="color:#888; margin:-6px 0 14px; font-size:0.82rem;">
+    GU{{ snapshot.params.gap_min_pct }}%以上を成り売り → 陰線{{ snapshot.params.take_profit_pct }}%で利確／
+    建値比 −{{ snapshot.params.stop_line_pct }}%で損切り／最大{{ snapshot.params.max_hold }}営業日。
+  </p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>建玉日</th><th>銘柄</th><th style="text-align:right">寄りギャップ</th>
+            <th style="text-align:right">保有</th><th>手仕舞い</th><th style="text-align:right">損益率</th></tr>
+      </thead>
+      <tbody>
+        {% for t in snapshot.ledger %}
+        <tr>
+          <td>{{ t.entry }}</td>
+          <td>{{ t.name }} <span style="color:#aaa; font-size:0.8rem;">{{ t.code }}</span></td>
+          <td style="text-align:right">+{{ "%.1f"|format(t.gap) }}%</td>
+          <td style="text-align:right; color:#888;">{{ t.hold }}日</td>
+          <td>
+            <span class="badge {{ 'b-pos' if t.reason=='利確' else 'b-neg' if t.reason=='損切' else 'b-neu' }}">{{ t.reason }}</span>
+          </td>
+          <td style="text-align:right; color:{{ '#28a745' if t.ret >= 0 else '#dc3545' }}; font-weight:600;">
+            {{ "%+.1f"|format(t.ret) }}%
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card" style="background:#fbfbfd;">
+  <h2>読み方の注意</h2>
+  <ul style="margin:0; padding-left:20px; color:#666; font-size:0.86rem; line-height:1.9;">
+    <li>10営業日規模の少数データ。④の最適パラメータは過剰最適化を含む“仮説”で、再現性はフォワードで継続検証する段階。</li>
+    <li>空売りは信用売建可の銘柄に限る／単元株・スリッページ・約定不成立は未考慮の理論値。損切りラインは引け値判定。</li>
+    <li>毎営業日その日の建玉に資金を等配分して複利。建玉直後で保有窓が未完のポジは最新確定足でマーク（日々の再計算で確定）。</li>
+  </ul>
+</div>
+
+<style>
+  .bt-summary { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:14px; }
+  .bt-card { border:1px solid #e9ecef; border-radius:8px; padding:14px 16px; position:relative; }
+  .bt-swatch { position:absolute; left:0; top:0; bottom:0; width:4px; border-radius:8px 0 0 8px; }
+  .bt-label { font-size:0.8rem; color:#555; min-height:34px; }
+  .bt-cap { font-size:1.5rem; font-weight:700; margin-top:8px; line-height:1.1;
+            font-variant-numeric:tabular-nums; }
+  .bt-pct { font-size:0.9rem; font-weight:600; }
+  .bt-meta { font-size:0.76rem; color:#999; margin-top:6px; }
+</style>
+
+<script id="bt-data" type="application/json">{{ snapshot | tojson }}</script>
+<script>
+(function(){
+  var DATA = JSON.parse(document.getElementById("bt-data").textContent);
+  var cv = document.getElementById("bt-chart"), ctx = cv.getContext("2d");
+  var W = cv.width, H = cv.height, padL = 130, padR = 130, padT = 24, padB = 56;
+  var axis = DATA.axis, n = axis.length;
+  var all = [];
+  DATA.rules.forEach(function(r){ all = all.concat(r.series); });
+  all.push(DATA.start_capital);
+  var lo = Math.min.apply(null, all), hi = Math.max.apply(null, all);
+  var step = 50000;
+  lo = Math.floor((lo - 4000) / step) * step;
+  hi = Math.ceil((hi + 4000) / step) * step;
+  function X(i){ return padL + (W - padL - padR) * i / (n - 1); }
+  function Y(v){ return padT + (H - padT - padB) * (1 - (v - lo) / (hi - lo)); }
+  var yen = function(v){ return "¥" + v.toLocaleString("en-US"); };
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.font = "20px ui-monospace,Menlo,monospace";
+  // y grid + labels
+  ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  for (var v = lo; v <= hi; v += step) {
+    var y = Y(v);
+    ctx.strokeStyle = (v === DATA.start_capital) ? "#c9ccd4" : "#edeff3";
+    ctx.lineWidth = (v === DATA.start_capital) ? 1.5 : 1;
+    if (v === DATA.start_capital) ctx.setLineDash([5,5]); else ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W - padR, y); ctx.stroke();
+    ctx.fillStyle = "#999"; ctx.fillText("¥" + (v/1000) + "k", padL - 12, y);
+  }
+  ctx.setLineDash([]);
+  // x labels (間引き)
+  ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.fillStyle = "#999";
+  var skip = Math.ceil(n / 14);
+  axis.forEach(function(d, i){ if (i % skip === 0 || i === n - 1) ctx.fillText(d, X(i), H - padB + 12); });
+  // lines
+  DATA.rules.forEach(function(r){
+    ctx.beginPath();
+    r.series.forEach(function(v, i){ var x = X(i), y = Y(v); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+    ctx.strokeStyle = r.color; ctx.lineWidth = 2.5; ctx.lineJoin = "round"; ctx.stroke();
+    var ex = X(n - 1), ey = Y(r.series[n - 1]);
+    ctx.fillStyle = r.color; ctx.beginPath(); ctx.arc(ex, ey, 4, 0, 7); ctx.fill();
+    ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.font = "bold 19px ui-monospace,monospace";
+    ctx.fillText(yen(r.series[n - 1]), ex + 8, ey);
+  });
+})();
+</script>
+
+{% endif %}
+{% endblock %}

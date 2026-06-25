@@ -1,0 +1,26 @@
+# 元本シミュレーション役: 引け後に実配信シグナルを各取引ルールで約定したと仮定し、
+# 元本の日次推移を再計算して backtest_runs に記録する。計測専用で既存パイプラインに干渉しない。
+# 平日 引け後 JST 16:35 = UTC 07:35（feedback 16:30 の直後）。
+name: backtest
+
+on:
+  schedule:
+    - cron: "35 7 * * 1-5"
+  workflow_dispatch:
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python -m backtest.agent
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_D1_DATABASE_ID: ${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
