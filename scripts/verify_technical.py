@@ -37,6 +37,12 @@ _HIT_SPIKE = 1.5      # 旬ヒットの出来高×前日 下限
 _NOISE_RANGE = 3.0    # ノイズ(空振り)判定: 値幅がこれ未満 かつ
 _NOISE_SPIKE = 1.5    #                     出来高×前日がこれ未満
 
+# 確定した成功基準（2026-06-26 ロック）。主指標は値幅(TR%)。
+SC_RANGE_HIT_MIN = 70.0   # 主指標: 値上り可能性＝値幅≥5%率 (%) の下限
+SC_NOISE_MAX = 15.0       # ノイズ: 空振り率 (%) の上限
+SC_VOL_GAP_MAX = 15.0     # 出来高源: 値幅≥5%率が up源比 これ(pt)以内の劣化まで許容
+SC_CAPTURE_MIN = 4.0      # 捕捉率: 合算捕捉率 (%) がこれ超で推移
+
 
 def _turnover_bucket(t) -> str:
     if t is None:
@@ -57,37 +63,99 @@ def _is_noise(m: dict) -> bool:
     return (m.get("range") or 0) < _NOISE_RANGE and (m.get("spike_prev") or 0) < _NOISE_SPIKE
 
 
-def _summarize(label: str, evs: list) -> None:
+def _stats(evs: list) -> dict | None:
+    """分割除外後の有効picksの集計。有効0なら None。"""
     ev = [e for e in evs if e["m"] and not e["m"]["split"]]
-    n_split = sum(1 for e in evs if e["m"] and e["m"]["split"])
-    n_nodata = sum(1 for e in evs if not e["m"])
     if not ev:
-        logger.info("  %s: 有効データなし（データ無%d/分割除外%d）", label, n_nodata, n_split)
-        return
+        return None
     n = len(ev)
-    hits = sum(1 for e in ev if _is_hit(e["m"]))
-    range_hits = sum(1 for e in ev if (e["m"].get("range") or 0) >= _HIT_RANGE)
-    noise = sum(1 for e in ev if _is_noise(e["m"]))
     ranges = [e["m"]["range"] for e in ev if e["m"]["range"] is not None]
     spikes = [e["m"]["spike_prev"] for e in ev if e["m"]["spike_prev"]]
+    return {
+        "n": n,
+        "range_hit_pct": 100 * sum(1 for e in ev if (e["m"].get("range") or 0) >= _HIT_RANGE) / n,
+        "hit_pct": 100 * sum(1 for e in ev if _is_hit(e["m"])) / n,
+        "noise_pct": 100 * sum(1 for e in ev if _is_noise(e["m"])) / n,
+        "range_med": median(ranges) if ranges else None,
+        "spike_med": median(spikes) if spikes else None,
+        "n_split": sum(1 for e in evs if e["m"] and e["m"]["split"]),
+        "n_nodata": sum(1 for e in evs if not e["m"]),
+    }
+
+
+def _summarize(label: str, evs: list) -> None:
+    s = _stats(evs)
+    if not s:
+        n_split = sum(1 for e in evs if e["m"] and e["m"]["split"])
+        n_nodata = sum(1 for e in evs if not e["m"])
+        logger.info("  %s: 有効データなし（データ無%d/分割除外%d）", label, n_nodata, n_split)
+        return
     parts = [
-        f"{label}: n={n}",
-        f"値幅≥{_HIT_RANGE:.0f}% {range_hits}件({100*range_hits/n:.0f}%)",
-        f"旬ヒット(値幅&出来高) {hits}件({100*hits/n:.0f}%)",
-        f"空振り {noise}件({100*noise/n:.0f}%)",
+        f"{label}: n={s['n']}",
+        f"値幅≥{_HIT_RANGE:.0f}% {s['range_hit_pct']:.0f}%",
+        f"旬ヒット(値幅&出来高) {s['hit_pct']:.0f}%",
+        f"空振り {s['noise_pct']:.0f}%",
     ]
-    if ranges:
-        parts.append(f"値幅中央{median(ranges):.1f}%")
-    if spikes:
-        parts.append(f"出来高×前日中央{median(spikes):.1f}")
+    if s["range_med"] is not None:
+        parts.append(f"値幅中央{s['range_med']:.1f}%")
+    if s["spike_med"] is not None:
+        parts.append(f"出来高×前日中央{s['spike_med']:.1f}")
     extra = []
-    if n_nodata:
-        extra.append(f"データ無{n_nodata}")
-    if n_split:
-        extra.append(f"分割除外{n_split}")
+    if s["n_nodata"]:
+        extra.append(f"データ無{s['n_nodata']}")
+    if s["n_split"]:
+        extra.append(f"分割除外{s['n_split']}")
     if extra:
         parts.append("(" + "/".join(extra) + ")")
     logger.info("  " + " | ".join(parts))
+
+
+def _verdict(all_ev: list) -> None:
+    """ロック済み成功基準に対する PASS/FAIL を自動判定する。"""
+    def pf(ok: bool) -> str:
+        return "✅PASS" if ok else "❌FAIL"
+
+    logger.info("\n=== 成功基準の判定（2026-06-26ロック） ===")
+    overall = _stats(all_ev)
+    if not overall:
+        logger.info("  判定不可：有効データなし（本番稼働後に再評価）")
+        return
+
+    c1 = overall["range_hit_pct"] >= SC_RANGE_HIT_MIN
+    logger.info("  [主指標] 値幅≥5%%率 %.0f%% （基準 ≥%.0f%%）→ %s",
+                overall["range_hit_pct"], SC_RANGE_HIT_MIN, pf(c1))
+    c2 = overall["noise_pct"] <= SC_NOISE_MAX
+    logger.info("  [ノイズ] 空振り率 %.0f%% （基準 ≤%.0f%%）→ %s",
+                overall["noise_pct"], SC_NOISE_MAX, pf(c2))
+
+    up, vol = _stats([e for e in all_ev if e["source"] == "up"]), _stats([e for e in all_ev if e["source"] == "vol"])
+    if vol and up:
+        gap = up["range_hit_pct"] - vol["range_hit_pct"]
+        c3 = gap <= SC_VOL_GAP_MAX and vol["noise_pct"] <= SC_NOISE_MAX
+        logger.info("  [出来高源] vol値幅≥5%%率 %.0f%%（up比 -%.0fpt / 空振り %.0f%%）→ %s",
+                    vol["range_hit_pct"], gap, vol["noise_pct"], pf(c3))
+    else:
+        logger.info("  [出来高源] vol源データ不足 → 判定保留（本番稼働後に再評価）")
+
+    try:
+        from store import coverage_runs
+        today = datetime.now(JST).strftime("%Y-%m-%d")
+        # 当日分は引け後cron前だと未確定(場中0%)になりうるので除外。日ごと最新1件にして直近確定日を採る。
+        seen, confirmed = set(), []
+        for c in coverage_runs.get_recent(20):
+            d = c.get("ranking_date")
+            if d in seen or d == today or c.get("capture_rate") is None:
+                continue
+            seen.add(d)
+            confirmed.append(c)
+        if confirmed:
+            latest = confirmed[0]["capture_rate"] * 100
+            logger.info("  [捕捉率] 直近確定 %s %.1f%% （基準 >%.0f%%）→ %s",
+                        confirmed[0]["ranking_date"], latest, SC_CAPTURE_MIN, pf(latest > SC_CAPTURE_MIN))
+        else:
+            logger.info("  [捕捉率] 確定データ無し → 判定保留")
+    except Exception:
+        logger.info("  [捕捉率] 取得失敗 → 判定保留")
 
 
 def run(date_from: str, date_to: str) -> None:
@@ -153,9 +221,10 @@ def run(date_from: str, date_to: str) -> None:
         seg = [e for e in all_ev if _turnover_bucket(e["turnover"]) == b]
         if seg:
             _summarize(b, seg)
+    _verdict(all_ev)
     logger.info(
-        "\n判定基準: 旬ヒット=値幅≥%.0f%% かつ 出来高×前日≥%.1f ／ 空振り=値幅<%.0f%% かつ 出来高×前日<%.1f",
-        _HIT_RANGE, _HIT_SPIKE, _NOISE_RANGE, _NOISE_SPIKE,
+        "\n指標定義: 値幅=日中TR%%(高-安)/前日終値 ／ 空振り=値幅<%.0f%% かつ 出来高×前日<%.1f",
+        _NOISE_RANGE, _NOISE_SPIKE,
     )
 
 
