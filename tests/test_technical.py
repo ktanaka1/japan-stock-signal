@@ -48,6 +48,12 @@ def _item(code, name, pct, etf=False, large=False):
                             change_pct=pct, is_etf=etf, is_large_cap=large)
 
 
+def _metrics(surge, close=1000.0, volume=200000):
+    # turnover = close*volume。既定 1000*200000=2億 > フロア1億。
+    return {"surge": surge, "close": close, "volume": volume,
+            "change_pct": 12.0, "asof": "2026-06-23"}
+
+
 def test_scan_filters(monkeypatch):
     items = [
         _item("1111", "急増大幅高", 12.0),                    # change OK, surge OK → 採用
@@ -56,15 +62,51 @@ def test_scan_filters(monkeypatch):
         _item("4444", "ETF", 20.0, etf=True),                 # 母集団外 → 除外
         _item("5555", "大型", 20.0, large=True),              # 母集団外 → 除外
         _item("6666", "本体配信済", 15.0),                    # dedup → 除外
+        _item("7777", "薄商い", 15.0),                        # 売買代金フロア未満 → 除外
     ]
     monkeypatch.setattr(agent.ranking, "fetch_ranking", lambda *a, **k: items)
-    surges = {"1111": 4.0, "3333": 1.2, "6666": 9.0}
+    metrics = {
+        "1111": _metrics(4.0),
+        "3333": _metrics(1.2),
+        "6666": _metrics(9.0),
+        "7777": _metrics(9.0, close=50.0, volume=1000),       # 5万円 ≪ 1億 → 弾く
+    }
     monkeypatch.setattr(agent.quotes, "get_daily_metrics",
-                        lambda code: {"surge": surges.get(code, 3.0), "close": 1000.0,
-                                      "change_pct": 12.0, "asof": "2026-06-23"})
-    picks = agent._scan(min_change=5.0, min_surge=2.0, top_n=30, exclude={"6666"})
+                        lambda code: metrics.get(code, _metrics(3.0)))
+    picks = agent._scan(min_change=5.0, min_surge=2.0, top_n=30, exclude={"6666"},
+                        min_turnover_yen=1e8, scan_volume=False, vol_min_change=3.0)
     codes = [p["code"] for p in picks]
     assert codes == ["1111"]
+    assert picks[0]["source"] == "up"
+    assert picks[0]["turnover"] == 2e8
+
+
+def test_scan_adds_volume_source(monkeypatch):
+    # up は対象なし、出来高ランキングから上昇方向＋surge＋代金を満たす銘柄を拾う。
+    up_items = [_item("1111", "値幅不足", 2.0)]                # change<5 → up採用なし
+    vol_items = [
+        _item("8888", "出来高先行", 4.0),                     # change≥3 surge OK 代金OK → vol採用
+        _item("9999", "下落", -1.0),                          # 上昇方向でない → 除外
+    ]
+    def _fetch(kind="up", **k):
+        return vol_items if kind == "volume" else up_items
+    monkeypatch.setattr(agent.ranking, "fetch_ranking", _fetch)
+    metrics = {"8888": _metrics(3.0), "9999": _metrics(5.0)}
+    monkeypatch.setattr(agent.quotes, "get_daily_metrics",
+                        lambda code: metrics.get(code, _metrics(3.0)))
+    picks = agent._scan(min_change=5.0, min_surge=2.0, top_n=30, exclude=set(),
+                        min_turnover_yen=1e8, scan_volume=True, vol_min_change=3.0)
+    assert [(p["code"], p["source"]) for p in picks] == [("8888", "vol")]
+
+
+def test_scan_dedup_up_priority(monkeypatch):
+    # 同一コードが up/volume 両方に出ても1件・up優先。
+    same = [_item("5050", "両ランクイン", 12.0)]
+    monkeypatch.setattr(agent.ranking, "fetch_ranking", lambda *a, **k: same)
+    monkeypatch.setattr(agent.quotes, "get_daily_metrics", lambda code: _metrics(4.0))
+    picks = agent._scan(min_change=5.0, min_surge=2.0, top_n=30, exclude=set(),
+                        min_turnover_yen=1e8, scan_volume=True, vol_min_change=3.0)
+    assert len(picks) == 1 and picks[0]["source"] == "up"
 
 
 def test_delivered_today_codes(monkeypatch):
@@ -83,6 +125,14 @@ def test_format_pick():
     p = {"code": "9444", "name": "トーシンHD", "change_pct": 34.2, "surge": 5.8, "close": 271.0}
     s = agent._format_pick(p)
     assert "トーシンHD(9444)" in s and "前日 +34.2%" in s and "出来高 5.8倍" in s
+    assert "📈値上り" in s
+
+
+def test_format_pick_volume_source():
+    p = {"code": "8888", "name": "出来高株", "change_pct": 4.0, "surge": 3.0,
+         "close": 1500.0, "turnover": 3.5e8, "source": "vol"}
+    s = agent._format_pick(p)
+    assert "🔊出来高" in s and "代金 3.5億" in s
 
 
 # ---- run() エンドツーエンド（モック） -------------------------------------------
@@ -93,7 +143,8 @@ def test_run_records_and_sends(monkeypatch):
     monkeypatch.setattr(agent.ranking, "fetch_ranking",
                         lambda *a, **k: [_item("1111", "急増", 12.0)])
     monkeypatch.setattr(agent.quotes, "get_daily_metrics",
-                        lambda code: {"surge": 4.0, "close": 1000.0, "change_pct": 12.0, "asof": "2026-06-23"})
+                        lambda code: {"surge": 4.0, "close": 1000.0, "volume": 200000,
+                                      "change_pct": 12.0, "asof": "2026-06-23"})
     sent = []
 
     class _Res:

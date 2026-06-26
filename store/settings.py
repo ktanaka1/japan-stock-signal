@@ -97,6 +97,12 @@ DEFAULTS: dict[str, str] = {
     "tech_min_volume_surge": "2.0",    # 出来高急増倍率の下限(倍。当日出来高/直近平均)
     "tech_top_n": "30",                # 値上がり率ランキング上位何件を母集団にするか
     "tech_dedup_with_news": "true",    # 本体ニュース版で当日配信済みの銘柄を除外するか
+    # 売買代金フロア(億円)。close×volume がこの額未満は薄商いノイズとして除外（全picks共通）。
+    "tech_min_turnover_oku": "1.0",
+    # 出来高ランキング(volume)も第2探索源にするか。価格より先に動く出来高先行を拾う。
+    "tech_scan_volume": "true",
+    # 出来高源の値上がり率下限(%)。up源(tech_min_change_pct)より緩く早期の上昇を拾う。
+    "tech_vol_min_change_pct": "3.0",
     # データ保持: 中立かつ銘柄なしの記事をこの日数経過後に削除する（maintenance.cleanup）。
     "retention_days": "90",
     # TDnetタイトル事前フィルタ: 非材料の定型開示をLLMに掛けず除外し、Gemini枠/未読バックログを節約。

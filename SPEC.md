@@ -149,11 +149,13 @@ LLMが生成した社名のハルシネーション（コードは正でも社�
 ニュース/開示を伴わないテーマ・需給・モメンタム駆動の動意は本体（ニュース起因）の対象外のため、
 **独立した第2系統**として配信する（`technical/` パッケージ・平日朝8:00 JST cron）。本体ロジックには触れない。
 
-- 値上がり率ランキング上位30（中小型・非ETF）のうち「**値上がり率≥5% かつ 出来高急増≥2倍**
-  （当日出来高 / 直近4営業日平均、`monitor/quotes.py`）」の複合条件で抽出
+- **2系統のランキング**から抽出（同一コードは値上がり率源を優先して1件に統合）:
+  - 値上がり率(up): 「**値上がり率≥5% かつ 出来高急増≥2倍**（当日出来高 / 直近4営業日平均、`monitor/quotes.py`）」
+  - 出来高(volume): 「**上昇方向(値上がり率≥3%) かつ 出来高急増≥2倍**」。価格より先に動く出来高先行を拾う第2源（`tech_scan_volume`でON/OFF）
+- **売買代金フロア**（`終値×出来高 ≥ 1億円`、`tech_min_turnover_oku`）を全picksに必須化。薄商い株の見せかけ急増（平均1→2の2倍など）を弾く
 - **本体digest（7:30）の後に実行**し、本体が当日配信した銘柄は除外（二重配信防止）。寄り前に届ける
-- 本体（✅/❌＋🔥）と区別した「📊 テクニカル注目」LINE。値動きが主役なので前日比%・出来高倍率を明示
-- 閾値は settings（`tech_min_change_pct` / `tech_min_volume_surge` / `tech_top_n` / `tech_dedup_with_news`）で調整可。`technical_runs` に配信記録
+- 本体（✅/❌＋🔥）と区別した「📊 テクニカル注目」LINE。前日比%・出来高倍率・売買代金（億円）・探索元（📈値上り/🔊出来高）を明示
+- 閾値は settings（`tech_min_change_pct` / `tech_min_volume_surge` / `tech_top_n` / `tech_dedup_with_news` / `tech_min_turnover_oku` / `tech_scan_volume` / `tech_vol_min_change_pct`）で調整可。`technical_runs` に配信記録
 
 ## 元本シミュレーション（バックテスト計測系）
 
