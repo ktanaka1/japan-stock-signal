@@ -1,0 +1,28 @@
+# EDINET 大量保有報告書アラート（需給シグナル・別レーン）。
+# 平日 寄り前 JST 07:00 = UTC 22:00 前日（Sun-Thu 22:00 UTC = Mon-Fri 07:00 JST）。本体digest(7:30)の前。
+# edinet_enabled=true かつ EDINET_API_KEY 設定時のみ動作（未設定/無効は no-op）。
+name: edinet
+
+on:
+  schedule:
+    - cron: "0 22 * * 0-4"
+  workflow_dispatch:
+
+jobs:
+  edinet:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python -m edinet.agent
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_D1_DATABASE_ID: ${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          EDINET_API_KEY: ${{ secrets.EDINET_API_KEY }}
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}

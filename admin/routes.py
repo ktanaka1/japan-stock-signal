@@ -391,6 +391,26 @@ async def settings_technical_save(request: Request):
     return RedirectResponse("/admin/settings?msg=テクニカル設定を保存しました", status_code=303)
 
 
+@router.post("/settings/edinet")
+async def settings_edinet_save(
+    request: Request,
+    edinet_enabled: str = Form(None),
+    edinet_new_only: str = Form(None),
+    edinet_filer_denylist: str = Form(""),
+):
+    """EDINET大量保有アラートの設定を保存する（別レーン。キー設定後に有効化）。"""
+    if not _is_authed(request):
+        return _login_redirect()
+
+    from store import settings as cfg
+    cfg.save_all({
+        "edinet_enabled": "true" if edinet_enabled else "false",
+        "edinet_new_only": "true" if edinet_new_only else "false",
+        "edinet_filer_denylist": edinet_filer_denylist.strip(),
+    })
+    return RedirectResponse("/admin/settings?msg=EDINET設定を保存しました", status_code=303)
+
+
 @router.post("/notify")
 async def notify_now(request: Request, background: BackgroundTasks):
     if not _is_authed(request):

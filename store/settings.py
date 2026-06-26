@@ -71,6 +71,15 @@ _TDNET_TITLE_DENYLIST_DEFAULT = "\n".join([
     "補足説明資料",
 ])
 
+# EDINET 大量保有報告書アラートで除外する提出者（パッシブ/インデックス運用・信託口）。
+# 部分一致で除外。これらは指数組換え等の機械的保有でデイトレ需給シグナルにならない。
+_EDINET_FILER_DENYLIST_DEFAULT = "\n".join([
+    "野村アセットマネジメント", "日興アセットマネジメント", "三菱ＵＦＪアセットマネジメント",
+    "三井住友トラスト・アセットマネジメント", "三井住友ＤＳアセットマネジメント",
+    "アセットマネジメントＯｎｅ", "ブラックロック", "ステート・ストリート", "バンガード",
+    "日本マスタートラスト信託銀行", "日本カストディ銀行", "ＪＰモルガン",
+])
+
 DEFAULTS: dict[str, str] = {
     "gemini_model": "gemini-2.5-flash",
     "gemini_system_prompt": _SYSTEM_PROMPT_DEFAULT,
@@ -103,6 +112,10 @@ DEFAULTS: dict[str, str] = {
     "tech_scan_volume": "true",
     # 出来高源の値上がり率下限(%)。up源(tech_min_change_pct)より緩く早期の上昇を拾う。
     "tech_vol_min_change_pct": "3.0",
+    # EDINET 大量保有報告書アラート（需給シグナル・別レーン）。
+    "edinet_enabled": "false",              # キー設定後に有効化
+    "edinet_new_only": "true",              # 新規(初回5%超)のみ配信。変更報告書は方向不明なので既定で抑制
+    "edinet_filer_denylist": _EDINET_FILER_DENYLIST_DEFAULT,
     # データ保持: 中立かつ銘柄なしの記事をこの日数経過後に削除する（maintenance.cleanup）。
     "retention_days": "90",
     # TDnetタイトル事前フィルタ: 非材料の定型開示をLLMに掛けず除外し、Gemini枠/未読バックログを節約。
