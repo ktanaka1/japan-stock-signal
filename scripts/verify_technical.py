@@ -42,6 +42,7 @@ SC_RANGE_HIT_MIN = 70.0   # 主指標: 値上り可能性＝値幅≥5%率 (%) �
 SC_NOISE_MAX = 15.0       # ノイズ: 空振り率 (%) の上限
 SC_VOL_GAP_MAX = 15.0     # 出来高源: 値幅≥5%率が up源比 これ(pt)以内の劣化まで許容
 SC_CAPTURE_MIN = 4.0      # 捕捉率: 合算捕捉率 (%) がこれ超で推移
+SC_MIN_N = 10             # 有効pick がこれ未満なら小サンプルとして判定保留（誤アラート抑止）
 
 
 def _turnover_bucket(t) -> str:
@@ -110,30 +111,43 @@ def _summarize(label: str, evs: list) -> None:
     logger.info("  " + " | ".join(parts))
 
 
-def _verdict(all_ev: list) -> None:
-    """ロック済み成功基準に対する PASS/FAIL を自動判定する。"""
+def _verdict(all_ev: list) -> list:
+    """ロック済み成功基準に対する PASS/FAIL を自動判定し、FAIL項目の説明リストを返す。
+
+    返り値が空＝全PASS or 判定保留。データ無し/小サンプルはFAIL扱いしない（誤アラート抑止）。
+    """
     def pf(ok: bool) -> str:
         return "✅PASS" if ok else "❌FAIL"
 
+    fails: list[str] = []
     logger.info("\n=== 成功基準の判定（2026-06-26ロック） ===")
     overall = _stats(all_ev)
     if not overall:
         logger.info("  判定不可：有効データなし（本番稼働後に再評価）")
-        return
+        return fails
+    if overall["n"] < SC_MIN_N:
+        logger.info("  サンプル不足（有効%d件 < %d）→ 判定保留（誤アラート抑止）", overall["n"], SC_MIN_N)
+        return fails
 
     c1 = overall["range_hit_pct"] >= SC_RANGE_HIT_MIN
     logger.info("  [主指標] 値幅≥5%%率 %.0f%% （基準 ≥%.0f%%）→ %s",
                 overall["range_hit_pct"], SC_RANGE_HIT_MIN, pf(c1))
+    if not c1:
+        fails.append(f"主指標 値幅≥5%%率 {overall['range_hit_pct']:.0f}% < {SC_RANGE_HIT_MIN:.0f}%")
     c2 = overall["noise_pct"] <= SC_NOISE_MAX
     logger.info("  [ノイズ] 空振り率 %.0f%% （基準 ≤%.0f%%）→ %s",
                 overall["noise_pct"], SC_NOISE_MAX, pf(c2))
+    if not c2:
+        fails.append(f"ノイズ 空振り率 {overall['noise_pct']:.0f}% > {SC_NOISE_MAX:.0f}%")
 
     up, vol = _stats([e for e in all_ev if e["source"] == "up"]), _stats([e for e in all_ev if e["source"] == "vol"])
-    if vol and up:
+    if vol and up and vol["n"] >= SC_MIN_N:
         gap = up["range_hit_pct"] - vol["range_hit_pct"]
         c3 = gap <= SC_VOL_GAP_MAX and vol["noise_pct"] <= SC_NOISE_MAX
         logger.info("  [出来高源] vol値幅≥5%%率 %.0f%%（up比 -%.0fpt / 空振り %.0f%%）→ %s",
                     vol["range_hit_pct"], gap, vol["noise_pct"], pf(c3))
+        if not c3:
+            fails.append(f"出来高源 vol値幅≥5%%率 {vol['range_hit_pct']:.0f}%（up比-{gap:.0f}pt/空振り{vol['noise_pct']:.0f}%）")
     else:
         logger.info("  [出来高源] vol源データ不足 → 判定保留（本番稼働後に再評価）")
 
@@ -150,12 +164,17 @@ def _verdict(all_ev: list) -> None:
             confirmed.append(c)
         if confirmed:
             latest = confirmed[0]["capture_rate"] * 100
+            c4 = latest > SC_CAPTURE_MIN
             logger.info("  [捕捉率] 直近確定 %s %.1f%% （基準 >%.0f%%）→ %s",
-                        confirmed[0]["ranking_date"], latest, SC_CAPTURE_MIN, pf(latest > SC_CAPTURE_MIN))
+                        confirmed[0]["ranking_date"], latest, SC_CAPTURE_MIN, pf(c4))
+            if not c4:
+                fails.append(f"捕捉率 直近 {latest:.1f}% ≤ {SC_CAPTURE_MIN:.0f}%")
         else:
             logger.info("  [捕捉率] 確定データ無し → 判定保留")
     except Exception:
         logger.info("  [捕捉率] 取得失敗 → 判定保留")
+
+    return fails
 
 
 def run(date_from: str, date_to: str) -> None:
@@ -194,7 +213,7 @@ def run(date_from: str, date_to: str) -> None:
                 date_from, date_to, len(events), len(codes))
     if not events:
         logger.info("対象 picks がありません。")
-        return
+        return []
 
     cache: dict[str, list] = {}
     for i, code in enumerate(codes, 1):
@@ -221,11 +240,28 @@ def run(date_from: str, date_to: str) -> None:
         seg = [e for e in all_ev if _turnover_bucket(e["turnover"]) == b]
         if seg:
             _summarize(b, seg)
-    _verdict(all_ev)
+    fails = _verdict(all_ev)
     logger.info(
         "\n指標定義: 値幅=日中TR%%(高-安)/前日終値 ／ 空振り=値幅<%.0f%% かつ 出来高×前日<%.1f",
         _NOISE_RANGE, _NOISE_SPIKE,
     )
+    return fails
+
+
+def _send_alert(fails: list) -> None:
+    """成功基準割れを運用宛先(ALERT_LINE_TO)にLINE通知する。購読者一覧には送らない。"""
+    import os
+    from monitor.notifier import send_text
+
+    to = [x.strip() for x in os.getenv("ALERT_LINE_TO", "").split(",") if x.strip()]
+    msg = ("⚠️ テクニカル版 成功基準ライン割れ\n"
+           + "\n".join(f"・{f}" for f in fails)
+           + "\n→ 管理画面『テクニカル設定』で閾値調整、または verify_technical で再確認を")
+    if not to:
+        logger.warning("ALERT_LINE_TO 未設定のためLINE通知スキップ（GHAのジョブ失敗通知で代替）")
+        return
+    res = send_text(msg, to)
+    logger.info("FAIL通知を運用宛先%d件へ送信 (ok=%s err=%s)", len(to), res.ok, res.error)
 
 
 def main() -> None:
@@ -233,8 +269,14 @@ def main() -> None:
     today = datetime.now(JST).strftime("%Y-%m-%d")
     ap.add_argument("--from", dest="date_from", required=True)
     ap.add_argument("--to", dest="date_to", default=today)
+    ap.add_argument("--alert", action="store_true",
+                    help="成功基準割れ時に ALERT_LINE_TO へLINE通知し exit 1（GHA監視用）")
     args = ap.parse_args()
-    run(args.date_from, args.date_to)
+    fails = run(args.date_from, args.date_to)
+    if fails:
+        if args.alert:
+            _send_alert(fails)
+        sys.exit(1)   # 基準割れ＝ジョブを赤にして異常を可視化（例外ベース監視）
 
 
 if __name__ == "__main__":
