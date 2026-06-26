@@ -157,6 +157,19 @@ LLMが生成した社名のハルシネーション（コードは正でも社�
 - 本体（✅/❌＋🔥）と区別した「📊 テクニカル注目」LINE。前日比%・出来高倍率・売買代金（億円）・探索元（📈値上り/🔊出来高）を明示
 - 閾値は **管理画面の「テクニカル設定」節から調整可**（`tech_min_change_pct` / `tech_min_volume_surge` / `tech_top_n` / `tech_dedup_with_news` / `tech_min_turnover_oku` / `tech_scan_volume` / `tech_vol_min_change_pct`）。型/範囲を検証しアトミック保存（DB直書き不要・サイレント誤チューニング防止）。`technical_runs` に配信記録
 
+## EDINET 大量保有報告書アラート（需給シグナル・別レーン・Phase 1）
+
+5%超の大量保有はTDnet/ニュースに出ない収集網の死角。EDINET API v2（要 `EDINET_API_KEY`）の
+**書類一覧メタデータのみ**で検出する（XBRLパース無し・`edinet/` パッケージ・平日寄り前7時台 cron）。
+
+- `documents.json` から **docTypeCode=350**（大量保有ファミリ）を抽出。`docDescription` で
+  「大量保有報告書」＝**新規**（初回5%超）/「変更報告書」＝変更を区別。**360=訂正はスキップ**
+- 対象銘柄は `secCode`（保有者側でnull）でなく **`issuerEdinetCode`** から、**EDINETコードリスト**
+  （`Edinetcode.zip`・キー不要・`edinetCode→証券コード5桁`）で4桁解決。REIT等（証券コード空）はスキップ
+- メタデータのみでは**方向（買い/売り）不明 → v1は中立アラート**（新規/変更タグのみ）。方向付けはPhase 2（XBRL割合）
+- `filerName` のパッシブ運用 denylist で除外。`docID` で冪等（`large_holdings`）。`edinet_runs` に記録
+- 既定 `edinet_enabled=false`・`edinet_new_only=true`（新規のみ＝ノイズ最小）。管理画面「EDINET」節で調整可
+
 ## 元本シミュレーション（バックテスト計測系）
 
 実際に配信したシグナル（`signals` notified_at済み・impact≥4）を、その後の実株価（Yahoo Finance 確定日足）で
@@ -183,6 +196,8 @@ LLMが生成した社名のハルシネーション（コードは正でも社�
 | digest_runs | 配信実行ログ | status, signal_count, line_ok/error, error_detail, notified_ids(JSON), run_at |
 | coverage_runs | 捕捉率フィードバックの記録 | ranking_date, ranking_type, top_n, universe, captured/captured_tech/signaled/neutral/not_collected, capture_rate, detail(JSON), proposal |
 | technical_runs | テクニカル版の配信記録 | target_date, status, pick_count, line_ok/error, picks(JSON), error_detail |
+| large_holdings | EDINET大量保有の通知済み管理（docID冪等） | doc_id(PK), sec_code, issuer_edinet_code, issuer_name, filer_name, doc_description, holding_ratio, notified_at |
+| edinet_runs | EDINETアラートの実行記録 | target_date, status, pick_count, line_ok/error, picks(JSON), error_detail |
 | backtest_runs | 元本シミュレーションの実行記録 | as_of, start_capital, snapshot(JSON・全ルールの日次エクイティ＋④明細) |
 | recipients | LINE受信者 | line_user_id(UNIQUE), followed_at |
 
@@ -202,7 +217,7 @@ LLMが生成した社名のハルシネーション（コードは正でも社�
 | 役割 | サービス |
 |---|---|
 | DB | Cloudflare D1 |
-| 定期実行（収集/精査/配信/捕捉率FB/テクニカル版/掃除） | GitHub Actions schedule（publicリポジトリのため無制限。collector/monitor/digest/feedback/technical/cleanup の6ワークフロー） |
+| 定期実行（収集/精査/配信/捕捉率FB/テクニカル版/EDINET/精度監視/掃除） | GitHub Actions schedule（publicリポジトリのため無制限。collector/monitor/digest/feedback/technical/edinet/verify-technical/cleanup の8ワークフロー） |
 | LINE Webhookサーバー（受信者管理） | Render Free Web Service |
 | LLM | Gemini API（既定 gemini-2.5-flash、管理画面で変更可） |
 
