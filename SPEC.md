@@ -155,7 +155,7 @@ LLMが生成した社名のハルシネーション（コードは正でも社�
 - **売買代金フロア**（`終値×出来高 ≥ 1億円`、`tech_min_turnover_oku`）を全picksに必須化。薄商い株の見せかけ急増（平均1→2の2倍など）を弾く
 - **本体digest（7:30）の後に実行**し、本体が当日配信した銘柄は除外（二重配信防止）。寄り前に届ける
 - 本体（✅/❌＋🔥）と区別した「📊 テクニカル注目」LINE。前日比%・出来高倍率・売買代金（億円）・探索元（📈値上り/🔊出来高）を明示
-- 閾値は settings（`tech_min_change_pct` / `tech_min_volume_surge` / `tech_top_n` / `tech_dedup_with_news` / `tech_min_turnover_oku` / `tech_scan_volume` / `tech_vol_min_change_pct`）で調整可。`technical_runs` に配信記録
+- 閾値は **管理画面の「テクニカル設定」節から調整可**（`tech_min_change_pct` / `tech_min_volume_surge` / `tech_top_n` / `tech_dedup_with_news` / `tech_min_turnover_oku` / `tech_scan_volume` / `tech_vol_min_change_pct`）。型/範囲を検証しアトミック保存（DB直書き不要・サイレント誤チューニング防止）。`technical_runs` に配信記録
 
 ## 元本シミュレーション（バックテスト計測系）
 

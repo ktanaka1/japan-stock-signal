@@ -94,4 +94,58 @@
 
 </form>
 
+<form method="post" action="/admin/settings/technical">
+  <div class="card">
+    <h2>テクニカル設定（朝の出来高/価格スキャナ）</h2>
+    <p class="text-muted" style="margin:0 0 14px">
+      寄り前8:00のテクニカル版（<code>technical/agent.py</code>）の検知パラメータ。変更は次回スキャンから反映。
+      各欄に<strong>現在値</strong>を併記。範囲外・型不正は保存されず理由を表示します（DB直書き廃止）。
+    </p>
+    <div style="display:flex; gap:40px; flex-wrap:wrap">
+      <div class="form-group">
+        <label>値上がり率の下限（%・値上り源）<br><small>値上がり率ランキング源の大幅高しきい値。現在: {{ settings.tech_min_change_pct }}</small></label>
+        <input type="number" name="tech_min_change_pct" value="{{ settings.tech_min_change_pct }}"
+          min="0" max="100" step="0.5" style="width:100px; margin-top:6px">
+      </div>
+      <div class="form-group">
+        <label>出来高急増倍率の下限（倍）<br><small>当日出来高 / 直近平均。両源共通。現在: {{ settings.tech_min_volume_surge }}</small></label>
+        <input type="number" name="tech_min_volume_surge" value="{{ settings.tech_min_volume_surge }}"
+          min="0" max="100" step="0.5" style="width:100px; margin-top:6px">
+      </div>
+      <div class="form-group">
+        <label>ランキング上位件数<br><small>up/出来高 双方の母集団。現在: {{ settings.tech_top_n }}</small></label>
+        <input type="number" name="tech_top_n" value="{{ settings.tech_top_n }}"
+          min="1" max="100" step="1" style="width:100px; margin-top:6px">
+      </div>
+      <div class="form-group">
+        <label>売買代金フロア（億円）<br><small>終値×出来高がこの額未満は薄商いとして除外。現在: {{ settings.tech_min_turnover_oku }}</small></label>
+        <input type="number" name="tech_min_turnover_oku" value="{{ settings.tech_min_turnover_oku }}"
+          min="0" max="10000" step="0.1" style="width:100px; margin-top:6px">
+      </div>
+      <div class="form-group">
+        <label>出来高源の値上がり率下限（%）<br><small>出来高ランキング源の上昇方向しきい値（up源より緩く早期を拾う）。現在: {{ settings.tech_vol_min_change_pct }}</small></label>
+        <input type="number" name="tech_vol_min_change_pct" value="{{ settings.tech_vol_min_change_pct }}"
+          min="0" max="100" step="0.5" style="width:100px; margin-top:6px">
+      </div>
+    </div>
+    <div class="form-group">
+      <div class="checkbox-group">
+        <label>
+          <input type="checkbox" name="tech_scan_volume" value="1"
+            {% if settings.tech_scan_volume == 'true' %}checked{% endif %}>
+          出来高ランキングも探索する（第2源）<small>現在: {{ '有効' if settings.tech_scan_volume == 'true' else '無効' }}</small>
+        </label>
+        <label>
+          <input type="checkbox" name="tech_dedup_with_news" value="1"
+            {% if settings.tech_dedup_with_news == 'true' %}checked{% endif %}>
+          本体ニュース版で当日配信済みの銘柄を除外する（二重配信防止）<small>現在: {{ '有効' if settings.tech_dedup_with_news == 'true' else '無効' }}</small>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <button class="btn btn-primary" type="submit">テクニカル設定を保存</button>
+  &nbsp;<a href="/admin" style="color:#888; font-size:0.88rem">キャンセル</a>
+</form>
+
 {% endblock %}

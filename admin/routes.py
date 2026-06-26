@@ -281,7 +281,7 @@ async def articles_view(
 
 
 @router.get("/settings", response_class=HTMLResponse)
-async def settings_view(request: Request, msg: str = None):
+async def settings_view(request: Request, msg: str = None, err: str = None):
     if not _is_authed(request):
         return _login_redirect()
 
@@ -292,6 +292,7 @@ async def settings_view(request: Request, msg: str = None):
         "request": request,
         "settings": current,
         "msg": msg,
+        "err": err,
     })
 
 
@@ -336,6 +337,58 @@ async def settings_save(
     })
 
     return RedirectResponse("/admin/settings?msg=設定を保存しました", status_code=303)
+
+
+# テクニカル設定の数値項目: key -> (型, 最小, 最大, ラベル)。範囲外・型不正は保存を中止する。
+_TECH_NUMERIC_SPECS = [
+    ("tech_min_change_pct", float, 0.0, 100.0, "値上がり率の下限(%)"),
+    ("tech_min_volume_surge", float, 0.0, 100.0, "出来高急増倍率の下限(倍)"),
+    ("tech_top_n", int, 1, 100, "ランキング上位件数"),
+    ("tech_min_turnover_oku", float, 0.0, 10000.0, "売買代金フロア(億円)"),
+    ("tech_vol_min_change_pct", float, 0.0, 100.0, "出来高源の値上がり率下限(%)"),
+]
+_TECH_BOOL_KEYS = ["tech_scan_volume", "tech_dedup_with_news"]
+
+
+@router.post("/settings/technical")
+async def settings_technical_save(request: Request):
+    """テクニカル版の閾値を保存する。DB直書きを廃し、型/範囲を検証してから永続化する。
+
+    既存の Gemini/収集設定とは独立フォーム。1項目でも不正なら全体を保存せず（アトミック）、
+    エラー内容を flash で返す。サイレントな誤チューニング（桁間違い等）を弾くのが目的。
+    """
+    if not _is_authed(request):
+        return _login_redirect()
+
+    form = await request.form()
+    parsed: dict[str, str] = {}
+    errors: list[str] = []
+
+    for key, caster, lo, hi, label in _TECH_NUMERIC_SPECS:
+        raw = (form.get(key) or "").strip().replace(",", "")
+        try:
+            val = caster(raw)
+        except (ValueError, TypeError):
+            errors.append(f"{label}=「{raw or '空'}」は{'整数' if caster is int else '数値'}で入力してください")
+            continue
+        if not (lo <= val <= hi):
+            errors.append(f"{label}=「{val}」は {lo}〜{hi} の範囲で入力してください")
+            continue
+        parsed[key] = str(val)
+
+    # チェックボックス（未チェックは送信されないので false 固定で確実に反映する）
+    for key in _TECH_BOOL_KEYS:
+        parsed[key] = "true" if form.get(key) else "false"
+
+    if errors:
+        return RedirectResponse(
+            "/admin/settings?err=保存しませんでした（" + " / ".join(errors) + "）",
+            status_code=303,
+        )
+
+    from store import settings as cfg
+    cfg.save_all(parsed)
+    return RedirectResponse("/admin/settings?msg=テクニカル設定を保存しました", status_code=303)
 
 
 @router.post("/notify")
