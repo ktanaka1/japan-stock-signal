@@ -72,6 +72,28 @@ def send_collector_alert(fail_streak: int, run_at_jst: str) -> None:
     _send(to_addr, subject, body)
 
 
+def send_technical_alert(fails: List[str], run_at_jst: str) -> None:
+    """テクニカル版の成功基準ライン割れをメールで通知する。REPORT_EMAIL 未設定ならスキップ。
+
+    例外ベース監視: 基準割れ(FAIL)時のみ1通送る。PASS時は無通知（formalize回避）。
+    """
+    to_addr = os.getenv("REPORT_EMAIL", "").strip()
+    if not to_addr:
+        return
+    subject = f"[株シグナル] ⚠テクニカル版 成功基準ライン割れ（{len(fails)}件）"
+    body = "\n".join([
+        "テクニカル版(朝の出来高/価格スキャナ)の成功基準を割りました。",
+        f"検知日時: {run_at_jst}",
+        "",
+        "割れた基準:",
+        *[f"  ・{f}" for f in fails],
+        "",
+        "対応: 管理画面の『テクニカル設定』で閾値を調整、",
+        "または `python -m scripts.verify_technical --from <日付>` で再確認してください。",
+    ])
+    _send(to_addr, subject, body)
+
+
 def send_collector_recovery(fail_streak: int, run_at_jst: str) -> None:
     """TDnet取得が復旧したことをメールで通知する。REPORT_EMAIL 未設定の場合はスキップ。"""
     to_addr = os.getenv("REPORT_EMAIL", "").strip()

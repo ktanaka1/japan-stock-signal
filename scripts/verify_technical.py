@@ -249,19 +249,15 @@ def run(date_from: str, date_to: str) -> None:
 
 
 def _send_alert(fails: list) -> None:
-    """成功基準割れを運用宛先(ALERT_LINE_TO)にLINE通知する。購読者一覧には送らない。"""
-    import os
-    from monitor.notifier import send_text
+    """成功基準割れを運用者へメール通知する（REPORT_EMAIL宛・既存アラートと同経路）。"""
+    from monitor import mailer
 
-    to = [x.strip() for x in os.getenv("ALERT_LINE_TO", "").split(",") if x.strip()]
-    msg = ("⚠️ テクニカル版 成功基準ライン割れ\n"
-           + "\n".join(f"・{f}" for f in fails)
-           + "\n→ 管理画面『テクニカル設定』で閾値調整、または verify_technical で再確認を")
-    if not to:
-        logger.warning("ALERT_LINE_TO 未設定のためLINE通知スキップ（GHAのジョブ失敗通知で代替）")
-        return
-    res = send_text(msg, to)
-    logger.info("FAIL通知を運用宛先%d件へ送信 (ok=%s err=%s)", len(to), res.ok, res.error)
+    run_at_jst = datetime.now(JST).strftime("%Y-%m-%d %H:%M")
+    try:
+        mailer.send_technical_alert(fails, run_at_jst)
+        logger.info("FAIL通知メールを送信（REPORT_EMAIL未設定ならスキップ）")
+    except Exception:
+        logger.exception("FAIL通知メールの送信に失敗（GHAのジョブ失敗通知で代替）")
 
 
 def main() -> None:
@@ -270,7 +266,7 @@ def main() -> None:
     ap.add_argument("--from", dest="date_from", required=True)
     ap.add_argument("--to", dest="date_to", default=today)
     ap.add_argument("--alert", action="store_true",
-                    help="成功基準割れ時に ALERT_LINE_TO へLINE通知し exit 1（GHA監視用）")
+                    help="成功基準割れ時に REPORT_EMAIL へメール通知し exit 1（GHA監視用）")
     args = ap.parse_args()
     fails = run(args.date_from, args.date_to)
     if fails:
