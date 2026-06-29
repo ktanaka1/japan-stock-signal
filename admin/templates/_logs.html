@@ -1,0 +1,126 @@
+{# 配信ログ・捕捉率フィードバックのテーブルマクロ。
+   ダッシュボード(index.html)と専用ページ(digest_log.html / coverage.html)の両方から呼び、
+   markup の二重管理を防ぐ。空時の「まだありません」メッセージもマクロ内に含める。 #}
+
+{% macro digest_table(runs) %}
+{% if runs %}
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>日時(JST)</th>
+        <th>結果</th>
+        <th>シグナル数</th>
+        <th>LINE送信(成/失)</th>
+        <th>エラー詳細</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for run in runs %}
+      <tr>
+        <td style="white-space:nowrap">{{ run.run_at_jst }}</td>
+        <td>
+          {% if run.status == "ok" %}<span class="badge b-pos">ok</span>
+          {% elif run.status == "partial" %}<span class="badge b-ntf">partial</span>
+          {% elif run.status == "error" %}<span class="badge b-neg">error</span>
+          {% elif run.status == "no_recipients" %}<span class="badge b-none">no_recipients</span>
+          {% else %}<span class="badge b-none">{{ run.status }}</span>{% endif %}
+        </td>
+        <td>
+          {% if run.signals %}
+          <details>
+            <summary style="cursor:pointer">{{ run.signal_count }}</summary>
+            <div class="run-signals">
+              {% for s in run.signals %}
+              <div class="run-signal">
+                <span class="badge {{ 'b-pos' if s.sentiment == 'positive' else 'b-neg' }}">
+                  {{ '✅' if s.sentiment == 'positive' else '❌' }}
+                  {{ s.stocks | map(attribute='name') | join('、') }}
+                </span>{% if s.impact %} <span title="インパクトスコア">🔥{{ s.impact }}</span>{% endif %}
+                {% for st in s.stocks if st.close|default(none) is not none %}
+                <div class="text-muted" style="font-size:0.8rem">📊 {{ st.name }} {{ '{:,.0f}'.format(st.close) }}円</div>
+                {% endfor %}
+                <div>{{ s.summary }}</div>
+                <a href="{{ s.url }}" target="_blank" rel="noopener" class="text-muted">{{ s.url }}</a>
+              </div>
+              {% endfor %}
+            </div>
+          </details>
+          {% else %}
+          {{ run.signal_count }}
+          {% endif %}
+        </td>
+        <td>{{ run.line_ok }} / {{ run.line_error }}</td>
+        <td>
+          {% if run.error_detail %}
+          <span class="trunc" title="{{ run.error_detail }}">{{ run.error_detail }}</span>
+          {% else %}
+          <span class="text-muted">—</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-muted" style="margin:0">配信ログはまだありません。</p>
+{% endif %}
+{% endmacro %}
+
+{% macro coverage_table(coverage) %}
+{% if coverage %}
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>対象日</th>
+        <th>捕捉率</th>
+        <th>母集団</th>
+        <th>配信(ﾆｭｰｽ/ﾃｸ)/未配信/中立/未収集</th>
+        <th>取りこぼし・提案</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in coverage %}
+      <tr>
+        <td style="white-space:nowrap">{{ c.ranking_date }}</td>
+        <td>
+          {% if c.capture_rate is not none %}
+          <strong>{{ '%.0f'|format(c.capture_rate * 100) }}%</strong>
+          {% else %}<span class="text-muted">—</span>{% endif %}
+        </td>
+        <td>{{ c.universe }}</td>
+        <td style="white-space:nowrap">
+          <span class="badge b-pos">{{ c.captured }}</span>
+          <span class="badge b-pos" title="テクニカル版で配信">📊{{ c.captured_tech or 0 }}</span>
+          <span class="badge b-ntf">{{ c.signaled }}</span>
+          <span class="badge b-none">{{ c.neutral }}</span>
+          <span class="badge b-neg">{{ c.not_collected }}</span>
+        </td>
+        <td>
+          <details>
+            <summary style="cursor:pointer">{{ c.proposal }}</summary>
+            <div class="run-signals">
+              {% for d in c.detail if d.in_universe and d.status not in ['delivered', 'delivered_technical'] %}
+              <div class="run-signal text-muted" style="font-size:0.85rem">
+                #{{ d.rank }} {{ d.name }}({{ d.code }})
+                {% if d.pct is not none %}+{{ d.pct }}%{% endif %}
+                —
+                {% if d.status == 'signaled_not_delivered' %}拾ったが未配信
+                {% elif d.status == 'analyzed_neutral' %}中立で落とした
+                {% else %}未収集{% endif %}
+              </div>
+              {% endfor %}
+            </div>
+          </details>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-muted" style="margin:0">捕捉率の記録はまだありません（引け後の feedback ジョブで生成）。</p>
+{% endif %}
+{% endmacro %}

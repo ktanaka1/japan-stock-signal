@@ -122,13 +122,15 @@ async def dashboard(request: Request, msg: str = None, stats_page: int = 0):
     from store import analyses, digest_runs, signals
     daily_stats, has_older = analyses.get_stats_recent_days(_DASHBOARD_DAYS, page=stats_page)
 
-    runs = digest_runs.get_recent(30)
+    # ダッシュボードは直近サマリだけ。全件は /admin/digest-log で見る。
+    runs = digest_runs.get_recent(3)
     for run in runs:
         run["run_at_jst"] = _to_jst_time(run.get("run_at", "") or "")
         # 配信したシグナルの内容（銘柄・要約・URL）を復元して展開表示できるようにする
         run["signals"] = signals.get_by_ids(run.get("notified_ids") or [])
 
     # 捕捉率フィードバック（読み取りのみ。テーブル未作成・取得失敗でもダッシュボードを壊さない）
+    # ダッシュボードは直近3営業日だけ。全件は /admin/coverage で見る。
     coverage = []
     try:
         from store import coverage_runs
@@ -141,7 +143,7 @@ async def dashboard(request: Request, msg: str = None, stats_page: int = 0):
                 continue
             seen_dates.add(d)
             coverage.append(c)
-            if len(coverage) >= 20:
+            if len(coverage) >= 3:
                 break
     except Exception:
         logger.warning("coverage_runs unavailable; skip section", exc_info=True)
@@ -155,6 +157,53 @@ async def dashboard(request: Request, msg: str = None, stats_page: int = 0):
         "coverage": coverage,
         "msg": msg,
         "pipeline_running": _pipeline_running,
+    })
+
+
+_LOG_PER_PAGE = 20  # 専用ページ（配信ログ・捕捉率）の1ページ件数
+
+
+@router.get("/digest-log", response_class=HTMLResponse)
+async def digest_log_view(request: Request, page: int = 1):
+    """配信ログ専用ページ。20件/ページで prev/next ページャ。"""
+    if not _is_authed(request):
+        return _login_redirect()
+
+    page = max(1, page)
+    from store import digest_runs, signals
+    runs, has_next = digest_runs.get_page(_LOG_PER_PAGE, (page - 1) * _LOG_PER_PAGE)
+    for run in runs:
+        run["run_at_jst"] = _to_jst_time(run.get("run_at", "") or "")
+        run["signals"] = signals.get_by_ids(run.get("notified_ids") or [])
+
+    return templates.TemplateResponse("digest_log.html", {
+        "request": request,
+        "runs": runs,
+        "page": page,
+        "has_next": has_next,
+    })
+
+
+@router.get("/coverage", response_class=HTMLResponse)
+async def coverage_view(request: Request, page: int = 1):
+    """捕捉率フィードバック専用ページ。20営業日/ページで prev/next ページャ。"""
+    if not _is_authed(request):
+        return _login_redirect()
+
+    page = max(1, page)
+    coverage = []
+    has_next = False
+    try:
+        from store import coverage_runs
+        coverage, has_next = coverage_runs.get_page(_LOG_PER_PAGE, (page - 1) * _LOG_PER_PAGE)
+    except Exception:
+        logger.warning("coverage_runs unavailable; skip section", exc_info=True)
+
+    return templates.TemplateResponse("coverage.html", {
+        "request": request,
+        "coverage": coverage,
+        "page": page,
+        "has_next": has_next,
     })
 
 

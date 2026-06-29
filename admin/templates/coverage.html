@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% from "_logs.html" import coverage_table %}
+{% block title %}捕捉率 - 株シグナル管理{% endblock %}
+{% block content %}
+
+<div class="card">
+  <h2>捕捉率フィードバック</h2>
+  <p class="text-muted" style="margin:0 0 8px">
+    値上がり率ランキング上位（中小型・非ETF）のうち、当日に拾えていた割合と取りこぼしの内訳。
+  </p>
+  {{ coverage_table(coverage) }}
+
+  <div class="pager" style="margin-top:18px; margin-bottom:0; justify-content:space-between">
+    <span>
+      {% if page > 1 %}<a class="nav" href="/admin/coverage?page={{ page - 1 }}">← 前へ</a>{% endif %}
+    </span>
+    <span class="text-muted" style="font-size:0.85rem">ページ {{ page }}</span>
+    <span>
+      {% if has_next %}<a class="nav" href="/admin/coverage?page={{ page + 1 }}">次へ →</a>{% endif %}
+    </span>
+  </div>
+</div>
+
+{% endblock %}
