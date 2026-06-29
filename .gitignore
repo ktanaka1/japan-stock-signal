@@ -14,7 +14,9 @@ __pycache__/
 *.pyc
 
 # プロジェクト固有
-data/
+data/*
+# 上場会社辞書（PR TIMES名寄せ用）はリポジトリ同梱するので除外から戻す（ローカルDB等は引き続き除外）
+!data/listed_companies.tsv
 .wrangler/
 *.pptx
 *.xlsx

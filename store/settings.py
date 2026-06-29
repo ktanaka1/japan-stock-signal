@@ -122,6 +122,10 @@ DEFAULTS: dict[str, str] = {
     # 既定OFF（捕捉率への影響を避けるため）。ON時のみ denylist のタイトル部分一致で除外する。
     "tdnet_title_prefilter_enabled": "false",
     "tdnet_title_prefilter_denylist": _TDNET_TITLE_DENYLIST_DEFAULT,
+    # PR TIMES RSS 取込（TDnet非開示のカタリスト=中小型株プレスリリースの回収）。
+    # dc_corp を上場辞書(data/listed_companies.tsv)で名寄せし一致のみ収集。既定OFF（検証後ON）。
+    "prtimes_enabled": "false",
+    "prtimes_rss_url": "https://prtimes.jp/index.rdf",
 }
 
 

@@ -66,6 +66,16 @@ def fetch_all() -> tuple[list[Article], bool]:
             articles.extend(fetched)
         except Exception:
             logger.warning("Failed to fetch %s", url, exc_info=True)
+
+    # --- PR TIMES（RDF・上場辞書で名寄せ一致のみ取込） ---
+    try:
+        prtimes = _fetch_prtimes()
+        if prtimes:
+            logger.info("Fetched %d listed entries from PR TIMES", len(prtimes))
+        articles.extend(prtimes)
+    except Exception:
+        logger.warning("Failed to fetch PR TIMES", exc_info=True)
+
     return articles, tdnet_ok
 
 
@@ -112,6 +122,45 @@ def _fetch_tdnet_json() -> list[Article]:
                 "company_code": (t.get("company_code") or "").strip() or None,
                 "company_name": (t.get("company_name") or "").strip() or None,
             })
+        articles.append(article)
+    return articles
+
+
+def _fetch_prtimes() -> list[Article]:
+    """PR TIMES の RDF を取得し、上場企業の発表分だけを Article 化する。
+
+    - prtimes_enabled が "true" でなければ即 no-op（既存挙動に一切影響を出さない）。
+    - 各 entry の dc_corp（発表企業名）を上場辞書で名寄せし、**完全一致したものだけ**取込む。
+      非上場・突合不可は破棄（収集すらしない＝Gemini枠を浪費しない）。
+    - 一致時は TDnet と同じ流儀で権威ある証券コード/社名を Article に付与する
+      （LLMに推測させない）。body はタイトルのみ（本文取得しない）。
+    """
+    from store import settings as cfg
+    from store import listed_companies as lc
+
+    if cfg.get("prtimes_enabled") != "true":
+        return []
+
+    url = cfg.get("prtimes_rss_url") or "https://prtimes.jp/index.rdf"
+    feed = feedparser.parse(url)
+
+    articles: list[Article] = []
+    for entry in feed.entries:
+        corp = (entry.get("dc_corp") or "").strip()
+        if not corp:
+            continue
+        matched = lc.lookup(corp)
+        if not matched:
+            continue  # 非上場 or 表記ゆれ → 破棄
+        code, name = matched
+        title = (entry.get("title") or "").strip()
+        link = entry.get("link") or ""
+        if not title or not link:
+            continue
+        article = Article(title=title, body=title, url=link)
+        # 権威ある同定情報（辞書由来の4桁コード＋正式社名）を付与する。
+        article.security_code = code
+        article.security_name = name
         articles.append(article)
     return articles
 
