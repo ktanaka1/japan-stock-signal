@@ -87,6 +87,29 @@ def load_window(since_utc: str, until_utc: str) -> Tuple[Set[str], Set[str], Set
     return delivered, filtered, analyzed, tech_delivered
 
 
+def _decide_status(
+    code: str,
+    delivered: Set[str],
+    filtered: Set[str],
+    analyzed: Set[str],
+    tech_delivered: Set[str],
+) -> str:
+    """1銘柄の status を優先度で決める（classify と reclassify_detail で共用）。
+
+    優先度: ニュース配信 > テクニカル配信 > 未配信 > 中立 > 未収集
+    （実際に配信できた2チャンネルを捕捉成功として最優先）。
+    """
+    if code in delivered:
+        return STATUS_DELIVERED
+    if code in tech_delivered:
+        return STATUS_DELIVERED_TECH
+    if code in filtered:
+        return STATUS_SIGNALED
+    if code in analyzed:
+        return STATUS_NEUTRAL
+    return STATUS_NOT_COLLECTED
+
+
 def classify(
     items: List[RankItem],
     delivered: Set[str],
@@ -94,23 +117,9 @@ def classify(
     analyzed: Set[str],
     tech_delivered: Set[str] = frozenset(),
 ) -> List[dict]:
-    """ランキング各銘柄に status を付けた detail を返す。
-
-    優先度: ニュース配信 > テクニカル配信 > 未配信 > 中立 > 未収集
-    （実際に配信できた2チャンネルを捕捉成功として最優先）。
-    """
+    """ランキング各銘柄に status を付けた detail を返す。"""
     detail = []
     for it in items:
-        if it.code in delivered:
-            status = STATUS_DELIVERED
-        elif it.code in tech_delivered:
-            status = STATUS_DELIVERED_TECH
-        elif it.code in filtered:
-            status = STATUS_SIGNALED
-        elif it.code in analyzed:
-            status = STATUS_NEUTRAL
-        else:
-            status = STATUS_NOT_COLLECTED
         detail.append({
             "rank": it.rank,
             "code": it.code,
@@ -118,9 +127,31 @@ def classify(
             "market": it.market,
             "pct": it.change_pct,
             "in_universe": it.in_universe,
-            "status": status,
+            "status": _decide_status(it.code, delivered, filtered, analyzed, tech_delivered),
         })
     return detail
+
+
+def reclassify_detail(
+    detail: List[dict],
+    delivered: Set[str],
+    filtered: Set[str],
+    analyzed: Set[str],
+    tech_delivered: Set[str] = frozenset(),
+) -> List[dict]:
+    """保存済み detail の各要素の status を最新の配信状況で再判定して返す。
+
+    finalize（D+1朝・配信完了後）で使う。ランキング自体（rank/code/name/market/pct/
+    in_universe）は snapshot 時のものを保持し、配信状況に依存する status のみ更新する。
+    """
+    out = []
+    for d in detail:
+        nd = dict(d)
+        nd["status"] = _decide_status(
+            str(d.get("code", "")).strip(), delivered, filtered, analyzed, tech_delivered
+        )
+        out.append(nd)
+    return out
 
 
 def count_universe(detail: List[dict]) -> dict:

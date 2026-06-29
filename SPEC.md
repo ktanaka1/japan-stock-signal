@@ -142,6 +142,13 @@ LLMが生成した社名のハルシネーション（コードは正でも社�
   実行されFB窓の内側に入るため、配信成功(`line_ok>0`)した `technical_runs` の picks を合算する
   （`captured_tech` に別記録）。支配的な取りこぼしクラスから改善レバー（収集網拡張・中立基準見直し・
   閾値チューニング 等）を提案し、`coverage_runs` に保存して管理画面に表示
+- **2フェーズ計測**（配信前の過小評価を防ぐ）: D当日に拾ったシグナルは翌営業日(D+1)朝に
+  配信されるため、配信前に測ると `signaled_not_delivered` に過大計上されてしまう。これを
+  ①**スナップショット**（D夕方の feedback cron, `python -m feedback.agent`）でその時点の暫定値を
+  `finalized=0` で記録し、②**確定**（D+1朝の digest 配信完了直後に `python -m feedback.agent --finalize`、
+  digest.yml の最終ステップ）で前営業日以前の暫定行を最新の `notified_at` で再判定し `finalized=1`
+  にする、の2段で行う。ランキングはライブ取得で過去日を遡れないため取得は①のD当日に限る。
+  確定処理は対象日ごと最新1行のみ・冪等。管理画面の捕捉率タブは行ごとに「暫定/確定」を表示
 - 出力は助言で、ロジックは自動変更しない（人が判断して別途反映）
 
 ## テクニカル版 朝のシグナル（価格/出来高駆動の別系統）
@@ -212,7 +219,7 @@ collector に追加し、既存のLLMインパクトスコアで材料性を選�
 | signals | 検出したシグナル | article_id(UNIQUE), sentiment, summary, stocks(JSON・終値等を含む), url, impact(1〜5), created_at, notified_at |
 | article_analyses | 分析結果（一覧/絞り込み用） | article_id(UNIQUE), sentiment, summary, reason, stocks(JSON), became_signal, impact |
 | digest_runs | 配信実行ログ | status, signal_count, line_ok/error, error_detail, notified_ids(JSON), run_at |
-| coverage_runs | 捕捉率フィードバックの記録 | ranking_date, ranking_type, top_n, universe, captured/captured_tech/signaled/neutral/not_collected, capture_rate, detail(JSON), proposal |
+| coverage_runs | 捕捉率フィードバックの記録 | ranking_date, ranking_type, top_n, universe, captured/captured_tech/signaled/neutral/not_collected, capture_rate, detail(JSON), proposal, finalized(0=暫定/1=確定) |
 | technical_runs | テクニカル版の配信記録 | target_date, status, pick_count, line_ok/error, picks(JSON), error_detail |
 | large_holdings | EDINET大量保有の通知済み管理（docID冪等） | doc_id(PK), sec_code, issuer_edinet_code, issuer_name, filer_name, doc_description, holding_ratio, notified_at |
 | edinet_runs | EDINETアラートの実行記録 | target_date, status, pick_count, line_ok/error, picks(JSON), error_detail |

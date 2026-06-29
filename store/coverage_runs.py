@@ -30,8 +30,8 @@ def record(
         """
         INSERT INTO coverage_runs
             (ranking_date, ranking_type, top_n, universe, captured, captured_tech,
-             signaled, neutral, not_collected, capture_rate, detail, proposal)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             signaled, neutral, not_collected, capture_rate, detail, proposal, finalized)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
         """,
         (
             ranking_date, ranking_type, top_n, universe, captured, captured_tech,
@@ -42,13 +42,70 @@ def record(
     return result.last_row_id or 0
 
 
+def update_finalize(
+    row_id: int,
+    captured: int,
+    captured_tech: int,
+    signaled: int,
+    neutral: int,
+    not_collected: int,
+    capture_rate: Optional[float],
+    detail: list,
+    proposal: str,
+) -> None:
+    """暫定記録(finalized=0)を配信完了後の確定値で更新し finalized=1 にする。
+
+    ranking_date / ranking_type / top_n / universe（母集団）は不変なので触らない。
+    配信状況に依存する captured 系・capture_rate・detail・proposal だけ上書きする。
+    """
+    execute(
+        """
+        UPDATE coverage_runs
+        SET captured = ?, captured_tech = ?, signaled = ?, neutral = ?,
+            not_collected = ?, capture_rate = ?, detail = ?, proposal = ?, finalized = 1
+        WHERE id = ?
+        """,
+        (
+            captured, captured_tech, signaled, neutral, not_collected, capture_rate,
+            json.dumps(detail, ensure_ascii=False), proposal, row_id,
+        ),
+    )
+
+
+def get_unfinalized_before(ranking_date: str) -> List[dict]:
+    """ranking_date より前で未確定(finalized=0)の暫定行を、対象日ごと最新1件だけ返す。
+
+    同一営業日に snapshot が複数回走ると暫定行が重複するため、ranking_date ごと
+    最大 id（＝最新の暫定計測）だけを確定対象とする。detail は Python リストに戻す。
+    """
+    rows = execute(
+        """
+        SELECT id, run_at, ranking_date, ranking_type, top_n, universe,
+               captured, captured_tech, signaled, neutral, not_collected,
+               capture_rate, detail, proposal, finalized
+        FROM coverage_runs
+        WHERE finalized = 0 AND ranking_date < ?
+          AND id IN (
+              SELECT MAX(id) FROM coverage_runs
+              WHERE finalized = 0 AND ranking_date < ?
+              GROUP BY ranking_date
+          )
+        ORDER BY ranking_date ASC
+        """,
+        (ranking_date, ranking_date),
+    ).rows
+    for row in rows:
+        row["detail"] = json.loads(row["detail"]) if row.get("detail") else []
+    return rows
+
+
 def get_recent(limit: int = 30) -> List[dict]:
     """最近の計測記録を新しい順に返す。detail は Python リストに戻す。"""
     rows = execute(
         """
         SELECT id, run_at, ranking_date, ranking_type, top_n, universe,
                captured, captured_tech, signaled, neutral, not_collected,
-               capture_rate, detail, proposal
+               capture_rate, detail, proposal, finalized
         FROM coverage_runs
         ORDER BY ranking_date DESC, id DESC
         LIMIT ?
@@ -71,7 +128,7 @@ def get_page(limit: int, offset: int) -> tuple[list[dict], bool]:
         """
         SELECT id, run_at, ranking_date, ranking_type, top_n, universe,
                captured, captured_tech, signaled, neutral, not_collected,
-               capture_rate, detail, proposal
+               capture_rate, detail, proposal, finalized
         FROM coverage_runs
         WHERE id IN (SELECT MAX(id) FROM coverage_runs GROUP BY ranking_date)
         ORDER BY ranking_date DESC

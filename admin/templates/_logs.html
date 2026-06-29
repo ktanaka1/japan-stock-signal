@@ -84,7 +84,14 @@
     <tbody>
       {% for c in coverage %}
       <tr>
-        <td style="white-space:nowrap">{{ c.ranking_date }}</td>
+        <td style="white-space:nowrap">
+          {{ c.ranking_date }}
+          {% if c.finalized %}
+          <span class="badge b-pos" title="配信完了後に確定">確定</span>
+          {% else %}
+          <span class="badge b-none" title="配信前のスナップショット（翌朝の配信後に確定）">暫定</span>
+          {% endif %}
+        </td>
         <td>
           {% if c.capture_rate is not none %}
           <strong>{{ '%.0f'|format(c.capture_rate * 100) }}%</strong>
