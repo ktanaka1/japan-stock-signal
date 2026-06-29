@@ -399,21 +399,17 @@ _TECH_NUMERIC_SPECS = [
 _TECH_BOOL_KEYS = ["tech_scan_volume", "tech_dedup_with_news"]
 
 
-@router.post("/settings/technical")
-async def settings_technical_save(request: Request):
-    """テクニカル版の閾値を保存する。DB直書きを廃し、型/範囲を検証してから永続化する。
+def _parse_settings_form(form, numeric_specs, bool_keys):
+    """settingsフォームを型/範囲検証してパースする共通ヘルパ。
 
-    既存の Gemini/収集設定とは独立フォーム。1項目でも不正なら全体を保存せず（アトミック）、
-    エラー内容を flash で返す。サイレントな誤チューニング（桁間違い等）を弾くのが目的。
+    numeric_specs は (key, caster, lo, hi, label) のリスト、bool_keys はチェックボックスのキー。
+    戻り値は (parsed: dict[str,str], errors: list[str])。1項目でも不正なら errors に積み、
+    呼び出し側でアトミックに保存中止する（テクニカル/フィルタ両フォーム共通の作法）。
     """
-    if not _is_authed(request):
-        return _login_redirect()
-
-    form = await request.form()
     parsed: dict[str, str] = {}
     errors: list[str] = []
 
-    for key, caster, lo, hi, label in _TECH_NUMERIC_SPECS:
+    for key, caster, lo, hi, label in numeric_specs:
         raw = (form.get(key) or "").strip().replace(",", "")
         try:
             val = caster(raw)
@@ -426,8 +422,24 @@ async def settings_technical_save(request: Request):
         parsed[key] = str(val)
 
     # チェックボックス（未チェックは送信されないので false 固定で確実に反映する）
-    for key in _TECH_BOOL_KEYS:
+    for key in bool_keys:
         parsed[key] = "true" if form.get(key) else "false"
+
+    return parsed, errors
+
+
+@router.post("/settings/technical")
+async def settings_technical_save(request: Request):
+    """テクニカル版の閾値を保存する。DB直書きを廃し、型/範囲を検証してから永続化する。
+
+    既存の Gemini/収集設定とは独立フォーム。1項目でも不正なら全体を保存せず（アトミック）、
+    エラー内容を flash で返す。サイレントな誤チューニング（桁間違い等）を弾くのが目的。
+    """
+    if not _is_authed(request):
+        return _login_redirect()
+
+    form = await request.form()
+    parsed, errors = _parse_settings_form(form, _TECH_NUMERIC_SPECS, _TECH_BOOL_KEYS)
 
     if errors:
         return RedirectResponse(
@@ -440,20 +452,54 @@ async def settings_technical_save(request: Request):
     return RedirectResponse("/admin/settings?msg=テクニカル設定を保存しました", status_code=303)
 
 
+# 配信フィルタ・収集ソースの設定項目（テクニカルと同型の仕様で検証する）。
+_FILTER_NUMERIC_SPECS = [
+    ("min_impact_for_notify", int, 1, 5, "配信に必要な最小インパクト(1〜5)"),
+]
+_FILTER_BOOL_KEYS = ["prtimes_enabled", "edinet_enabled", "exclude_large_cap"]
+
+
+@router.post("/settings/filters")
+async def settings_filters_save(request: Request):
+    """配信フィルタ・収集ソースを保存する（テクニカル設定と同じアトミック検証の流儀）。
+
+    収集ソース（PR TIMES / EDINET）と防御フィルタ（大型株除外 / 最小インパクト）を一括保存。
+    1項目でも不正なら全体を保存せず（アトミック）、flash でエラーを返す。
+    """
+    if not _is_authed(request):
+        return _login_redirect()
+
+    form = await request.form()
+    parsed, errors = _parse_settings_form(form, _FILTER_NUMERIC_SPECS, _FILTER_BOOL_KEYS)
+
+    if errors:
+        return RedirectResponse(
+            "/admin/settings?err=保存しませんでした（" + " / ".join(errors) + "）",
+            status_code=303,
+        )
+
+    from store import settings as cfg
+    cfg.save_all(parsed)
+    return RedirectResponse("/admin/settings?msg=配信フィルタ・収集ソースを保存しました", status_code=303)
+
+
 @router.post("/settings/edinet")
 async def settings_edinet_save(
     request: Request,
-    edinet_enabled: str = Form(None),
     edinet_new_only: str = Form(None),
     edinet_filer_denylist: str = Form(""),
 ):
-    """EDINET大量保有アラートの設定を保存する（別レーン。キー設定後に有効化）。"""
+    """EDINET大量保有アラートのEDINET固有設定を保存する（別レーン）。
+
+    edinet_enabled（収集ソースのON/OFF）はここでは扱わない。有効/無効の操縦は統合
+    「配信フィルタ・収集ソース」カード（/settings/filters）に一本化している。
+    ここで edinet_enabled を書くと checkbox 不在=false で毎回OFFに戻すフットガンになるため除外。
+    """
     if not _is_authed(request):
         return _login_redirect()
 
     from store import settings as cfg
     cfg.save_all({
-        "edinet_enabled": "true" if edinet_enabled else "false",
         "edinet_new_only": "true" if edinet_new_only else "false",
         "edinet_filer_denylist": edinet_filer_denylist.strip(),
     })

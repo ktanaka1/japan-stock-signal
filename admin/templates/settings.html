@@ -148,6 +148,43 @@
   &nbsp;<a href="/admin" style="color:#888; font-size:0.88rem">キャンセル</a>
 </form>
 
+<form method="post" action="/admin/settings/filters">
+  <div class="card">
+    <h2>配信フィルタ・収集ソース</h2>
+    <p class="text-muted" style="margin:0 0 14px">
+      シグナルの収集ソースのON/OFFと、配信前に弾く防御フィルタ。
+      範囲外・型不正は保存されず理由を表示します（1項目でも不正なら全体保存中止）。
+    </p>
+    <div class="form-group">
+      <div class="checkbox-group">
+        <label>
+          <input type="checkbox" name="prtimes_enabled" value="1"
+            {% if settings.prtimes_enabled == 'true' %}checked{% endif %}>
+          PR TIMES を収集する<small>TDnet非開示のプレスリリースを収集。現在: {{ '有効' if settings.prtimes_enabled == 'true' else '無効' }}</small>
+        </label>
+        <label>
+          <input type="checkbox" name="edinet_enabled" value="1"
+            {% if settings.edinet_enabled == 'true' %}checked{% endif %}>
+          EDINET を収集する<small>大量保有報告書の需給アラート。現在: {{ '有効' if settings.edinet_enabled == 'true' else '無効' }}</small>
+        </label>
+        <label>
+          <input type="checkbox" name="exclude_large_cap" value="1"
+            {% if settings.exclude_large_cap == 'true' %}checked{% endif %}>
+          大型株のみのシグナルを配信しない<small>TOPIX Core30相当の大型株のみのシグナルを配信しない。現在: {{ '除外する' if settings.exclude_large_cap == 'true' else '除外しない' }}</small>
+        </label>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>配信に必要な最小インパクト（1〜5）<br><small>これ未満のシグナルは配信しない(1〜5)。現在: {{ settings.min_impact_for_notify }}</small></label>
+      <input type="number" name="min_impact_for_notify" value="{{ settings.min_impact_for_notify }}"
+        min="1" max="5" step="1" style="width:100px; margin-top:6px">
+    </div>
+  </div>
+
+  <button class="btn btn-primary" type="submit">配信フィルタ・収集ソースを保存</button>
+  &nbsp;<a href="/admin" style="color:#888; font-size:0.88rem">キャンセル</a>
+</form>
+
 <form method="post" action="/admin/settings/edinet">
   <div class="card">
     <h2>EDINET 大量保有報告書アラート（需給シグナル・別レーン）</h2>
@@ -156,13 +193,12 @@
       v1はメタデータのみ＝<strong>方向（買い/売り）は判定しない中立アラート</strong>。
       コードリストで証券コードを権威解決（REIT等は対象外）。
     </p>
+    <p class="text-muted" style="margin:0 0 14px">
+      EDINETの有効/無効は上の「配信フィルタ・収集ソース」カードで操作します。
+      ここでは EDINET固有の配信条件（新規のみ / 提出者除外リスト）を管理します。
+    </p>
     <div class="form-group">
       <div class="checkbox-group">
-        <label>
-          <input type="checkbox" name="edinet_enabled" value="1"
-            {% if settings.edinet_enabled == 'true' %}checked{% endif %}>
-          EDINETアラートを有効にする<small>現在: {{ '有効' if settings.edinet_enabled == 'true' else '無効' }}（EDINET_API_KEY未設定なら動きません）</small>
-        </label>
         <label>
           <input type="checkbox" name="edinet_new_only" value="1"
             {% if settings.edinet_new_only == 'true' %}checked{% endif %}>
