@@ -170,6 +170,24 @@ LLMが生成した社名のハルシネーション（コードは正でも社�
 - `filerName` のパッシブ運用 denylist で除外。`docID` で冪等（`large_holdings`）。`edinet_runs` に記録
 - 既定 `edinet_enabled=false`・`edinet_new_only=true`（新規のみ＝ノイズ最小）。管理画面「EDINET」節で調整可
 
+## PR TIMES プレスリリース取込（Phase 1）
+
+中小型/グロース株は「人気IPコラボ」「特許」「大手採用」などTDnetに載らないプレスリリースで動く。
+捕捉率FBの支配要因 `not_collected` の回収策。PR TIMES の RDF（`index.rdf`・機械可読・403にならない）を
+collector に追加し、既存のLLMインパクトスコアで材料性を選別する。
+
+- 名寄せが核心: RSSに証券コードが無く大半が非上場。**発表企業名 `dc_corp` を正規化して上場辞書に
+  完全一致したものだけ取込む**（非一致は収集せず破棄＝Gemini枠を浪費しない・ノイズ除去と権威コード付与を同時達成）
+- 上場辞書は**リポジトリ同梱の静的TSV**（`data/listed_companies.tsv`・JPX `data_j.xls` 由来・内国株式のみ）。
+  起動時に `store/listed_companies.py` が標準ライブラリ `csv` だけでロード（収集ホットパスをネット非依存・高速・安全劣化に保つ）。
+  再生成はオフライン用 `scripts/refresh_listed_companies.py`（重いExcel依存 xlrd はスクリプト専用＝collectorのデプロイ依存に混ぜない）
+- 正規化: 株式会社/(株)/㈱、HD↔ホールディングス、全半角(NFKC)・空白・中黒を吸収。**保守的突合**（高信頼一致のみ採用、
+  正規化キーが複数社に衝突する曖昧キーは除外）。表記ゆれの取りこぼし(recall低下)は許容し誤コード付与(precision低下)を回避
+- 一致時のみ `Article(title, body=title, url)` を生成し権威ある `security_code`/`security_name` を付与（本文は取得しない）。
+  以降は既存パイプライン（save_many→精査LLM→インパクトスコア選別）に乗る
+- 既定 `prtimes_enabled=false`（検証後ON）・`prtimes_rss_url=https://prtimes.jp/index.rdf`。
+  無効時は `_fetch_prtimes()` が即 no-op（既存挙動に影響なし）
+
 ## 元本シミュレーション（バックテスト計測系）
 
 実際に配信したシグナル（`signals` notified_at済み・impact≥4）を、その後の実株価（Yahoo Finance 確定日足）で
@@ -211,6 +229,7 @@ LLMが生成した社名のハルシネーション（コードは正でも社�
 | Yahoo!ニュース ビジネス | https://news.yahoo.co.jp/rss/topics/business.xml |
 | TDnet 適時開示（やのしんWEB-API・JSON） | https://webapi.yanoshin.jp/webapi/tdnet/list/recent.json?limit=100 |
 | NHK 経済 | https://www.nhk.or.jp/rss/news/cat6.xml |
+| PR TIMES プレスリリース（RDF・上場社名で名寄せ一致のみ取込・既定OFF） | https://prtimes.jp/index.rdf |
 
 ## インフラ（すべて無料枠）
 

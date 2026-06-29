@@ -1,7 +1,20 @@
 # WIP: PR TIMES RSS 取込（TDnetの死角＝非開示カタリストの収集）
 
-> 状態: 設計中（未実装）。実装＋テスト完了でこのファイルを削除し、要点を SPEC.md へ統合する。
+> 状態: **Phase1 実装＆テスト完了**（要点は SPEC.md「PR TIMES プレスリリース取込（Phase 1）」へ反映済み）。
+> 本ファイルは Phase2（カテゴリ別RDF/辞書のD1化＋管理画面メンテ）の設計メモとして残置する。
 > 関連: メモリ [[news-source-evaluation]]。捕捉率FBの支配要因 `not_collected` の回収策。
+
+## Phase1 実装メモ（完了）
+
+- `store/listed_companies.py`: `data/listed_companies.tsv` を csv だけでロード。`normalize_name()`/`lookup()`。
+  正規化キーが複数社に衝突する曖昧キーは除外（実データで8キー除外・有効3718社）。
+- `scripts/refresh_listed_companies.py`: JPX `data_j.xls`→TSV 再生成（オフライン・xlrd はスクリプト専用、
+  requirements.txt には入れない）。内国株式（プライム/スタンダード/グロース）3734社のみ採用。
+- `collector/fetcher.py` `_fetch_prtimes()`: `prtimes_enabled!="true"` で即 no-op。dc_corp を名寄せ一致のみ
+  Article化し権威コード/社名を付与（body=title）。`fetch_all()` から呼ぶ（TDnet/他RSSの失敗と独立）。
+- settings: `prtimes_enabled`(既定false)・`prtimes_rss_url`(index.rdf)。
+- `.gitignore`: `data/` を `data/*` に変え `!data/listed_companies.tsv` で辞書のみ追跡（ローカルDBは除外維持）。
+- tests: `tests/test_prtimes.py`（正規化/辞書ロード/曖昧除外/収集の上場フィルタ/no-op）。
 
 ## 目的・背景
 
