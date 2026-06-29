@@ -34,20 +34,45 @@ def record(
     return result.last_row_id or 0
 
 
-def get_recent(limit: int = 20) -> List[dict]:
-    """最近の実行記録を新しい順に返す。notified_ids は Python リストに戻す。"""
-    rows = execute(
-        """
-        SELECT id, run_at, status, signal_count, line_ok, line_error, error_detail, notified_ids
-        FROM digest_runs
-        ORDER BY run_at DESC
-        LIMIT ?
-        """,
-        (limit,),
-    ).rows
+def _restore_notified_ids(rows: List[dict]) -> List[dict]:
+    """notified_ids カラムの JSON 文字列を Python リストに戻す（in-place）。"""
     for row in rows:
         if row.get("notified_ids"):
             row["notified_ids"] = json.loads(row["notified_ids"])
         else:
             row["notified_ids"] = []
     return rows
+
+
+def get_recent(limit: int = 20) -> List[dict]:
+    """最近の実行記録を新しい順に返す。notified_ids は Python リストに戻す。"""
+    rows = execute(
+        """
+        SELECT id, run_at, status, signal_count, line_ok, line_error, error_detail, notified_ids
+        FROM digest_runs
+        ORDER BY run_at DESC, id DESC
+        LIMIT ?
+        """,
+        (limit,),
+    ).rows
+    return _restore_notified_ids(rows)
+
+
+def get_page(limit: int, offset: int) -> tuple[list[dict], bool]:
+    """配信ログを新しい順に1ページ分返す。
+
+    limit+1 件取得して has_next を判定し、表示用に rows[:limit] を返す。
+    戻り値は (rows, has_next)。notified_ids は Python リストに戻す。
+    """
+    rows = execute(
+        """
+        SELECT id, run_at, status, signal_count, line_ok, line_error, error_detail, notified_ids
+        FROM digest_runs
+        ORDER BY run_at DESC, id DESC
+        LIMIT ? OFFSET ?
+        """,
+        (limit + 1, offset),
+    ).rows
+    has_next = len(rows) > limit
+    rows = rows[:limit]
+    return _restore_notified_ids(rows), has_next
