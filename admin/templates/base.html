@@ -13,10 +13,14 @@
        clip は横はみ出しを切るだけでスクロールコンテナを作らないため横揺れ防止と sticky を両立できる。 */
     html, body { max-width: 100%; overflow-x: clip; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 0; background: #f4f6f9; color: #333; font-size: 14px; }
-    header { background: #1a1a2e; color: white; padding: 12px 24px; display: flex; align-items: center; flex-wrap: wrap; gap: 10px 22px; position: sticky; top: 0; z-index: 100; }
-    header strong { font-size: 1rem; color: white; }
-    header a { color: #9aa; text-decoration: none; font-size: 0.9rem; }
-    header a:hover { color: white; }
+    header { background: #1a1a2e; color: white; padding: 0 24px; display: flex; align-items: center; flex-wrap: wrap; column-gap: 4px; row-gap: 0; position: sticky; top: 0; z-index: 100; }
+    header strong { font-size: 1rem; color: white; padding: 12px 18px 12px 0; }
+    /* タブ：下線インジケータで現在地を明示。非アクティブは淡色、hoverで明るく、activeは白＋下線 */
+    header a.tab { color: #9aa; text-decoration: none; font-size: 0.9rem; padding: 16px 14px; border-bottom: 3px solid transparent; transition: color .12s, border-color .12s, background .12s; }
+    header a.tab:hover { color: #fff; background: rgba(255,255,255,.06); }
+    header a.tab.active { color: #fff; font-weight: 600; border-bottom-color: #4dabf7; }
+    header a.logout { color: #9aa; text-decoration: none; font-size: 0.9rem; margin-left: auto; padding: 12px 0 12px 18px; }
+    header a.logout:hover { color: #fff; }
     .main { max-width: 1300px; margin: 24px auto; padding: 0 24px; }
     .card { background: white; border-radius: 8px; padding: 20px 24px; margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.07); max-width: 100%; }
     /* テーブルがカード幅を超えたらカード内部で横スクロール（ページ全体は揺らさない） */
@@ -93,15 +97,21 @@
   </style>
 </head>
 <body>
+  {% set _path = request.url.path %}
   <header>
     <strong>株シグナル 管理</strong>
-    <a href="/admin">ダッシュボード</a>
-    <a href="/admin/articles">記事一覧</a>
-    <a href="/admin/digest-log">配信ログ</a>
-    <a href="/admin/coverage">捕捉率</a>
-    <a href="/admin/backtest">元本シミュレーション</a>
-    <a href="/admin/settings">条件設定</a>
-    <a href="/admin/logout" style="margin-left:auto">ログアウト</a>
+    {% for item in [
+        {'href': '/admin',            'label': 'ダッシュボード'},
+        {'href': '/admin/articles',   'label': '記事一覧'},
+        {'href': '/admin/digest-log', 'label': '配信ログ'},
+        {'href': '/admin/coverage',   'label': '捕捉率'},
+        {'href': '/admin/backtest',   'label': '元本シミュレーション'},
+        {'href': '/admin/settings',   'label': '条件設定'}
+      ] %}
+      {% set active = (_path == item.href) if item.href == '/admin' else _path.startswith(item.href) %}
+      <a class="tab{% if active %} active{% endif %}" href="{{ item.href }}"{% if active %} aria-current="page"{% endif %}>{{ item.label }}</a>
+    {% endfor %}
+    <a class="logout" href="/admin/logout">ログアウト</a>
   </header>
   <div class="main">
     {% if msg %}<div class="flash flash-ok">{{ msg }}</div>{% endif %}
