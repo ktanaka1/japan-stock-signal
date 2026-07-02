@@ -1,5 +1,10 @@
 """捕捉率フィードバック（feedback パッケージ）のテスト。既存テーブルは読み取りのみ。"""
 import json
+import os
+
+# --- 環境ガード: 本番D1へ繋がない（CLAUDE.md） ---
+assert os.getenv("FORCE_LOCAL_DB") == "1", "FORCE_LOCAL_DB=1 を必須にする（本番D1誤接続防止）"
+assert os.getenv("DB_PATH"), "DB_PATH を指定すること"
 
 from store.db import migrate, execute
 from feedback import ranking, matcher, proposals
@@ -101,6 +106,8 @@ def test_count_universe_combines_news_and_technical():
 
 def test_load_window_reads_signals_and_analyses():
     migrate()
+    # 共有DBに前回実行の行が残っていると article_id UNIQUE で衝突するため自浄する
+    execute("DELETE FROM signals WHERE article_id IN (9001, 9002, 9003)")
     # 窓: 2026-06-22 06:00 〜 2026-06-23 06:00 (UTC)
     since, until = "2026-06-22 06:00:00", "2026-06-23 06:00:00"
     # 配信済みシグナル（窓内・notified あり）

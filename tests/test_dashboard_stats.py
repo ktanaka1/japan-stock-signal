@@ -13,6 +13,10 @@ import os
 assert os.getenv("FORCE_LOCAL_DB") == "1", "FORCE_LOCAL_DB=1 を必須にする（本番D1誤接続防止）"
 assert os.getenv("DB_PATH"), "DB_PATH を指定すること"
 
+# 認証はリクエスト時に環境変数を読むため、テスト用トークンを自前で用意する
+# （load_dotenv は既存の環境変数を上書きしないので、この値がそのまま使われる）
+os.environ.setdefault("ADMIN_TOKEN", "test-admin-token")
+
 
 def _fresh_db():
     db_path = os.environ["DB_PATH"]
@@ -176,7 +180,8 @@ def test_dashboard_renders_table_with_links():
 
     token = os.environ["ADMIN_TOKEN"]
     with TestClient(app) as c:
-        resp = c.get("/admin", cookies={"admin_session": token})
+        c.cookies.set("admin_session", token)
+        resp = c.get("/admin")
         assert resp.status_code == 200
         html = resp.text
         assert "パイプライン統計" in html
@@ -201,7 +206,8 @@ def test_dashboard_stats_page_navigation():
 
     token = os.environ["ADMIN_TOKEN"]
     with TestClient(app) as c:
-        resp = c.get("/admin?stats_page=1", cookies={"admin_session": token})
+        c.cookies.set("admin_session", token)
+        resp = c.get("/admin?stats_page=1")
         assert resp.status_code == 200
         html = resp.text
         # 2ページ目の日付（4〜6番目）が表示される
@@ -225,6 +231,7 @@ def test_dashboard_stats_page_out_of_range():
 
     token = os.environ["ADMIN_TOKEN"]
     with TestClient(app) as c:
-        resp = c.get("/admin?stats_page=99", cookies={"admin_session": token})
+        c.cookies.set("admin_session", token)
+        resp = c.get("/admin?stats_page=99")
         assert resp.status_code == 200
         assert "この期間のデータはありません" in resp.text

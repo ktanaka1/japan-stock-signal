@@ -1,6 +1,10 @@
 """TDnet取得の連続失敗を検知してメール障害アラートを出すロジックのテスト。"""
 import os
 
+# --- 環境ガード: 本番D1へ繋がない（CLAUDE.md） ---
+assert os.getenv("FORCE_LOCAL_DB") == "1", "FORCE_LOCAL_DB=1 を必須にする（本番D1誤接続防止）"
+assert os.getenv("DB_PATH"), "DB_PATH を指定すること"
+
 from store.db import migrate
 from store import settings as cfg
 
