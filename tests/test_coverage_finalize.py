@@ -6,6 +6,11 @@ snapshot は D夕方の配信前に測るため未配信を過小評価する。
 ネットワーク非依存（ranking.fetch_ranking をモック）。
 """
 import json
+import os
+
+# --- 環境ガード: 本番D1へ繋がない（CLAUDE.md） ---
+assert os.getenv("FORCE_LOCAL_DB") == "1", "FORCE_LOCAL_DB=1 を必須にする（本番D1誤接続防止）"
+assert os.getenv("DB_PATH"), "DB_PATH を指定すること"
 
 from store.db import migrate, execute
 from store import coverage_runs
@@ -143,6 +148,42 @@ def test_finalize_picks_max_id_per_date(monkeypatch):
     newer = execute("SELECT finalized FROM coverage_runs WHERE id=?", (newer_id,)).rows[0]
     assert older["finalized"] == 0           # 旧暫定行は触らない
     assert newer["finalized"] == 1           # 最新だけ確定
+
+
+def test_finalize_does_not_resurrect_older_provisional(monkeypatch, caplog):
+    """最新行を確定した後、同日の旧い暫定行が翌日以降の finalize で浮上しない（ゾンビ行回帰）。
+
+    確定対象の MAX(id) を「未確定行の中」で取ると、最新行の確定後に旧暫定行が
+    「未確定の中の最大id」として翌日の finalize に選ばれ二重確定される。
+    """
+    migrate()
+    # 他テストの残置行を除外して隔離
+    execute("UPDATE coverage_runs SET finalized = 1")
+    detail = [{"rank": 1, "code": "Z001", "name": "x", "market": "東証STD",
+               "pct": 10.0, "in_universe": True, "status": "not_collected"}]
+    for _ in range(2):
+        coverage_runs.record(
+            ranking_date="2026-06-25", ranking_type="up", top_n=30, universe=1,
+            captured=0, captured_tech=0, signaled=0, neutral=0, not_collected=1,
+            capture_rate=0.0, detail=detail, proposal="p",
+        )
+    ids = [r["id"] for r in
+           execute("SELECT id FROM coverage_runs WHERE ranking_date='2026-06-25'"
+                   " AND finalized=0 ORDER BY id").rows]
+    older_id, newer_id = ids[0], ids[1]
+
+    import datetime as _dt
+    _freeze_now(monkeypatch, _dt.datetime(2026, 6, 27, 7, 35, tzinfo=agent.JST))
+    agent.finalize()
+    assert execute("SELECT finalized FROM coverage_runs WHERE id=?", (newer_id,)).rows[0]["finalized"] == 1
+
+    # 翌日もう一度 finalize: 旧暫定行が確定対象に浮上せず「nothing to do」で終わること
+    _freeze_now(monkeypatch, _dt.datetime(2026, 6, 28, 7, 35, tzinfo=agent.JST))
+    import logging
+    with caplog.at_level(logging.INFO):
+        agent.finalize()
+    assert any("nothing to do" in r.message for r in caplog.records)
+    assert execute("SELECT finalized FROM coverage_runs WHERE id=?", (older_id,)).rows[0]["finalized"] == 0
 
 
 def test_finalize_is_idempotent(monkeypatch):

@@ -77,6 +77,10 @@ def get_unfinalized_before(ranking_date: str) -> List[dict]:
 
     同一営業日に snapshot が複数回走ると暫定行が重複するため、ranking_date ごと
     最大 id（＝最新の暫定計測）だけを確定対象とする。detail は Python リストに戻す。
+
+    内側の MAX(id) は finalized を問わず全行から取る。未確定行に限定すると、最新行を
+    確定した翌日に同日の旧い暫定行が「未確定の中の最大id」として浮上し、二重確定される
+    （旧暫定行は最新行の確定後も finalized=0 のまま残るが、二度と選ばれない死蔵行になる）。
     """
     rows = execute(
         """
@@ -87,7 +91,7 @@ def get_unfinalized_before(ranking_date: str) -> List[dict]:
         WHERE finalized = 0 AND ranking_date < ?
           AND id IN (
               SELECT MAX(id) FROM coverage_runs
-              WHERE finalized = 0 AND ranking_date < ?
+              WHERE ranking_date < ?
               GROUP BY ranking_date
           )
         ORDER BY ranking_date ASC
