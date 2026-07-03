@@ -175,9 +175,9 @@
       </div>
     </div>
     <div class="form-group">
-      <label>配信に必要な最小インパクト（1〜5）<br><small>これ未満のシグナルは配信しない(1〜5)。現在: {{ settings.min_impact_for_notify }}</small></label>
+      <label>配信に必要な最小インパクト（0〜5）<br><small>これ未満のシグナルは配信しない。0で全件配信。現在: {{ settings.min_impact_for_notify }}</small></label>
       <input type="number" name="min_impact_for_notify" value="{{ settings.min_impact_for_notify }}"
-        min="1" max="5" step="1" style="width:100px; margin-top:6px">
+        min="0" max="5" step="1" style="width:100px; margin-top:6px">
     </div>
   </div>
 

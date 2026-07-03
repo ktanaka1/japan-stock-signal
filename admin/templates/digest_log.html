@@ -5,7 +5,7 @@
 
 <div class="card">
   <h2>配信ログ</h2>
-  {{ digest_table(runs) }}
+  {{ digest_table(runs, paged=(page > 1)) }}
 
   <div class="pager" style="margin-top:18px; margin-bottom:0; justify-content:space-between">
     <span>

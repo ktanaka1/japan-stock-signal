@@ -2,7 +2,7 @@
    ダッシュボード(index.html)と専用ページ(digest_log.html / coverage.html)の両方から呼び、
    markup の二重管理を防ぐ。空時の「まだありません」メッセージもマクロ内に含める。 #}
 
-{% macro digest_table(runs) %}
+{% macro digest_table(runs, paged=false) %}
 {% if runs %}
 <div class="table-wrap">
   <table>
@@ -41,7 +41,10 @@
                 <div class="text-muted" style="font-size:0.8rem">📊 {{ st.name }} {{ '{:,.0f}'.format(st.close) }}円</div>
                 {% endfor %}
                 <div>{{ s.summary }}</div>
+                {# 外部RSS由来のURLなので http(s) 以外（javascript: 等）はリンク化しない #}
+                {% if s.url and s.url.startswith('http') %}
                 <a href="{{ s.url }}" target="_blank" rel="noopener" class="text-muted">{{ s.url }}</a>
+                {% elif s.url %}<span class="text-muted">{{ s.url }}</span>{% endif %}
               </div>
               {% endfor %}
             </div>
@@ -64,11 +67,14 @@
   </table>
 </div>
 {% else %}
-<p class="text-muted" style="margin:0">配信ログはまだありません。</p>
+<p class="text-muted" style="margin:0">
+  {% if paged %}このページに配信ログはありません（範囲外のページです）。
+  {% else %}配信ログはまだありません。{% endif %}
+</p>
 {% endif %}
 {% endmacro %}
 
-{% macro coverage_table(coverage) %}
+{% macro coverage_table(coverage, paged=false) %}
 {% if coverage %}
 <div class="table-wrap">
   <table>
@@ -128,6 +134,9 @@
   </table>
 </div>
 {% else %}
-<p class="text-muted" style="margin:0">捕捉率の記録はまだありません（引け後の feedback ジョブで生成）。</p>
+<p class="text-muted" style="margin:0">
+  {% if paged %}このページに捕捉率の記録はありません（範囲外のページです）。
+  {% else %}捕捉率の記録はまだありません（引け後の feedback ジョブで生成）。{% endif %}
+</p>
 {% endif %}
 {% endmacro %}

@@ -105,7 +105,15 @@ def test_unchecked_checkbox_becomes_false(client):
     assert cfg.get("edinet_enabled") == "true"
 
 
-@pytest.mark.parametrize("bad", ["0", "6", "abc"])
+def test_min_impact_zero_means_deliver_all(client):
+    """0（=全件配信。monitor/digest.py の min_impact=0 と同義）は有効値として保存できる。"""
+    from store import settings as cfg
+    r = _post(client, min_impact_for_notify="0")
+    assert r.status_code == 303 and "msg=" in r.headers["location"]
+    assert cfg.get("min_impact_for_notify") == "0"
+
+
+@pytest.mark.parametrize("bad", ["-1", "6", "abc"])
 def test_min_impact_out_of_range_or_nonnumeric_rejected_atomically(client, bad):
     from store import settings as cfg
     before_impact = cfg.get("min_impact_for_notify")

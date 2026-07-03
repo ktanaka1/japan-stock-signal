@@ -8,7 +8,7 @@
   <p class="text-muted" style="margin:0 0 8px">
     値上がり率ランキング上位（中小型・非ETF）のうち、当日に拾えていた割合と取りこぼしの内訳。
   </p>
-  {{ coverage_table(coverage) }}
+  {{ coverage_table(coverage, paged=(page > 1)) }}
 
   <div class="pager" style="margin-top:18px; margin-bottom:0; justify-content:space-between">
     <span>

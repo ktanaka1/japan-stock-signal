@@ -7,6 +7,7 @@ import os
 import threading
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -79,7 +80,7 @@ async def login_form(request: Request, err: str = None):
         raise HTTPException(status_code=503, detail="ADMIN_TOKEN not configured")
     if _is_authed(request):
         return RedirectResponse("/admin", status_code=303)
-    return templates.TemplateResponse("login.html", {"request": request, "err": err})
+    return templates.TemplateResponse(request, "login.html", {"err": err})
 
 
 @router.post("/login")
@@ -148,8 +149,7 @@ async def dashboard(request: Request, msg: str = None, stats_page: int = 0):
     except Exception:
         logger.warning("coverage_runs unavailable; skip section", exc_info=True)
 
-    return templates.TemplateResponse("index.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "index.html", {
         "daily_stats": daily_stats,
         "stats_page": stats_page,
         "has_older": has_older,
@@ -172,12 +172,14 @@ async def digest_log_view(request: Request, page: int = 1):
     page = max(1, page)
     from store import digest_runs, signals
     runs, has_next = digest_runs.get_page(_LOG_PER_PAGE, (page - 1) * _LOG_PER_PAGE)
+    # D1は1クエリ=1 HTTP往復なので、20 run分のシグナル復元を1回のIN句バッチに畳む（N+1回避）
+    all_ids = [i for run in runs for i in (run.get("notified_ids") or [])]
+    by_id = {s["id"]: s for s in signals.get_by_ids(all_ids)}
     for run in runs:
         run["run_at_jst"] = _to_jst_time(run.get("run_at", "") or "")
-        run["signals"] = signals.get_by_ids(run.get("notified_ids") or [])
+        run["signals"] = [by_id[i] for i in sorted(run.get("notified_ids") or []) if i in by_id]
 
-    return templates.TemplateResponse("digest_log.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "digest_log.html", {
         "runs": runs,
         "page": page,
         "has_next": has_next,
@@ -199,8 +201,7 @@ async def coverage_view(request: Request, page: int = 1):
     except Exception:
         logger.warning("coverage_runs unavailable; skip section", exc_info=True)
 
-    return templates.TemplateResponse("coverage.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "coverage.html", {
         "coverage": coverage,
         "page": page,
         "has_next": has_next,
@@ -228,8 +229,7 @@ async def backtest_view(request: Request):
     except Exception:
         logger.warning("backtest_runs unavailable; skip section", exc_info=True)
 
-    return templates.TemplateResponse("backtest.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "backtest.html", {
         "snapshot": snapshot,
         "run_at_jst": run_at_jst,
     })
@@ -303,8 +303,7 @@ async def articles_view(
     for row in rows:
         row["fetched_at_jst"] = _to_jst_time(row.get("fetched_at", "") or "")
 
-    resp = templates.TemplateResponse("articles.html", {
-        "request": request,
+    resp = templates.TemplateResponse(request, "articles.html", {
         "date": date,
         "year": year,
         "available_years": available_years,
@@ -337,8 +336,7 @@ async def settings_view(request: Request, msg: str = None, err: str = None):
     from store import settings as cfg
     current = cfg.get_all()
 
-    return templates.TemplateResponse("settings.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "settings.html", {
         "settings": current,
         "msg": msg,
         "err": err,
@@ -442,8 +440,9 @@ async def settings_technical_save(request: Request):
     parsed, errors = _parse_settings_form(form, _TECH_NUMERIC_SPECS, _TECH_BOOL_KEYS)
 
     if errors:
+        # ユーザーの生入力を含むため quote する（& や # が素通りするとflashが途切れる）
         return RedirectResponse(
-            "/admin/settings?err=保存しませんでした（" + " / ".join(errors) + "）",
+            "/admin/settings?err=" + quote("保存しませんでした（" + " / ".join(errors) + "）"),
             status_code=303,
         )
 
@@ -454,7 +453,8 @@ async def settings_technical_save(request: Request):
 
 # 配信フィルタ・収集ソースの設定項目（テクニカルと同型の仕様で検証する）。
 _FILTER_NUMERIC_SPECS = [
-    ("min_impact_for_notify", int, 1, 5, "配信に必要な最小インパクト(1〜5)"),
+    # 0=全件配信（monitor/digest.py の min_impact=0 と同義）を画面から選べるよう下限は0
+    ("min_impact_for_notify", int, 0, 5, "配信に必要な最小インパクト(0=全件, 1〜5)"),
 ]
 _FILTER_BOOL_KEYS = ["prtimes_enabled", "edinet_enabled", "exclude_large_cap"]
 
@@ -473,8 +473,9 @@ async def settings_filters_save(request: Request):
     parsed, errors = _parse_settings_form(form, _FILTER_NUMERIC_SPECS, _FILTER_BOOL_KEYS)
 
     if errors:
+        # ユーザーの生入力を含むため quote する（& や # が素通りするとflashが途切れる）
         return RedirectResponse(
-            "/admin/settings?err=保存しませんでした（" + " / ".join(errors) + "）",
+            "/admin/settings?err=" + quote("保存しませんでした（" + " / ".join(errors) + "）"),
             status_code=303,
         )
 
