@@ -83,7 +83,7 @@
         <th>対象日</th>
         <th>捕捉率</th>
         <th>母集団</th>
-        <th>配信(ﾆｭｰｽ/ﾃｸ)/未配信/中立/未収集</th>
+        <th>配信(ﾆｭｰｽ/ﾃｸ)/🔁昇格/未配信/中立/未収集</th>
         <th>取りこぼし・提案</th>
       </tr>
     </thead>
@@ -107,6 +107,7 @@
         <td style="white-space:nowrap">
           <span class="badge b-pos">{{ c.captured }}</span>
           <span class="badge b-pos" title="テクニカル版で配信">📊{{ c.captured_tech or 0 }}</span>
+          <span class="badge b-ntf" title="逆引き昇格で翌朝救済（捕捉率には不算入）">🔁{{ c.rescued or 0 }}</span>
           <span class="badge b-ntf">{{ c.signaled }}</span>
           <span class="badge b-none">{{ c.neutral }}</span>
           <span class="badge b-neg">{{ c.not_collected }}</span>
@@ -121,6 +122,7 @@
                 {% if d.pct is not none %}+{{ d.pct }}%{% endif %}
                 —
                 {% if d.status == 'signaled_not_delivered' %}拾ったが未配信
+                {% elif d.status == 'delivered_rescue' %}🔁 逆引き昇格で翌朝救済
                 {% elif d.status == 'analyzed_neutral' %}中立で落とした
                 {% else %}未収集{% endif %}
               </div>

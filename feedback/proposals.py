@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from feedback.matcher import (
     STATUS_DELIVERED_TECH,
+    STATUS_RESCUED,
     STATUS_SIGNALED,
     STATUS_NEUTRAL,
     STATUS_NOT_COLLECTED,
@@ -39,8 +40,10 @@ def build_proposal(counts: dict, capture_rate) -> str:
     rate_s = f"{capture_rate * 100:.0f}%" if capture_rate is not None else "—"
     tech = counts.get(STATUS_DELIVERED_TECH, 0)
     tech_s = f"（うちテクニカル版 {tech}件）" if tech else ""
+    resc = counts.get(STATUS_RESCUED, 0)
+    resc_s = f"。逆引き昇格で{resc}件を翌朝救済（捕捉率には不算入）" if resc else ""
     if total_miss == 0:
-        return f"捕捉率 {rate_s}{tech_s}。母集団の取りこぼしなし。"
+        return f"捕捉率 {rate_s}{tech_s}{resc_s}。母集団の取りこぼしなし。"
 
     dominant = max(misses, key=lambda k: misses[k])
     label, lever = _LEVERS[dominant]
@@ -48,6 +51,6 @@ def build_proposal(counts: dict, capture_rate) -> str:
         f"{_LEVERS[k][0]}:{misses[k]}" for k in _LEVERS if misses[k]
     )
     return (
-        f"捕捉率 {rate_s}{tech_s}。取りこぼし内訳[{breakdown}]。"
+        f"捕捉率 {rate_s}{tech_s}{resc_s}。取りこぼし内訳[{breakdown}]。"
         f"支配要因＝『{label}』({misses[dominant]}件) → 推奨レバー: {lever}"
     )

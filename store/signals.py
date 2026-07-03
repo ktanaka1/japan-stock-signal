@@ -20,7 +20,8 @@ def get_unnotified() -> list[dict]:
     """未通知のシグナルを古い順に返す。"""
     rows = execute(
         """
-        SELECT id, article_id, sentiment, summary, stocks, url, impact, created_at
+        SELECT id, article_id, sentiment, summary, stocks, url, impact, created_at,
+               promoted_at, promote_reason
         FROM signals
         WHERE notified_at IS NULL
         ORDER BY id ASC
@@ -46,7 +47,8 @@ def get_by_ids(signal_ids: list[int]) -> list[dict]:
         placeholders = ", ".join(["?"] * len(chunk))
         rows.extend(execute(
             f"""
-            SELECT id, article_id, sentiment, summary, stocks, url, impact, created_at
+            SELECT id, article_id, sentiment, summary, stocks, url, impact, created_at,
+                   promoted_at, promote_reason
             FROM signals
             WHERE id IN ({placeholders})
             """,
@@ -56,6 +58,18 @@ def get_by_ids(signal_ids: list[int]) -> list[dict]:
     for row in rows:
         row["stocks"] = json.loads(row["stocks"])
     return rows
+
+
+def promote(signal_id: int, reason: str) -> None:
+    """シグナルを逆引き昇格する（impact閾値未満でも翌朝のdigestで配信される）。
+
+    未配信・未昇格の行だけを更新する（冪等。配信済み・昇格済みは触らない）。
+    """
+    execute(
+        "UPDATE signals SET promoted_at = datetime('now'), promote_reason = ? "
+        "WHERE id = ? AND notified_at IS NULL AND promoted_at IS NULL",
+        (reason, signal_id),
+    )
 
 
 def mark_notified(signal_ids: list[int]) -> None:

@@ -143,13 +143,14 @@ def test_load_window_reads_signals_and_analyses():
             ("2026-06-22 23:05:00", "2026-06-22", "error", 1, 0,
              json.dumps([{"code": "9999", "name": "failed"}])))
 
-    delivered, filtered, analyzed, tech_delivered = matcher.load_window(since, until)
+    delivered, filtered, analyzed, tech_delivered, rescued = matcher.load_window(since, until)
     assert "6533" in delivered
     assert "7777" in filtered
     assert "8888" not in delivered and "8888" not in filtered  # 窓外
     assert "5555" in analyzed
     assert "6600" in tech_delivered           # 配信成功したテク版pick
     assert "9999" not in tech_delivered        # 配信失敗は捕捉に数えない
+    assert rescued == set()                    # 昇格経由の配信なし
 
 
 # ---- 改善提案 ------------------------------------------------------------------
@@ -182,7 +183,7 @@ def test_agent_run_records_coverage(monkeypatch):
     monkeypatch.setattr(agent.ranking, "fetch_ranking", lambda *a, **k: fake)
     # 窓内に 6533 のニュース配信済み、7700 をテクニカル版配信済みとして与える
     monkeypatch.setattr(agent.matcher, "load_window",
-                        lambda s, u: ({"6533"}, set(), set(), {"7700"}))
+                        lambda s, u: ({"6533"}, set(), set(), {"7700"}, set()))
 
     agent.run()
 

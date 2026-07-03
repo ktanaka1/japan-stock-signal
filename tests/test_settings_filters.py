@@ -39,7 +39,9 @@ def _post(client, **overrides):
         "prtimes_enabled": "1",
         "edinet_enabled": "1",
         "exclude_large_cap": "1",
+        "rescue_enabled": "1",
         "min_impact_for_notify": "4",
+        "rescue_min_impact": "3",
     }
     data.update(overrides)
     # None を渡したキーは「送信しない」（チェックボックス未チェック相当）
@@ -56,6 +58,8 @@ def test_settings_page_renders_four_items(client):
     assert 'name="edinet_enabled"' in html
     assert 'name="exclude_large_cap"' in html
     assert 'name="min_impact_for_notify"' in html
+    assert 'name="rescue_enabled"' in html
+    assert 'name="rescue_min_impact"' in html
     # 既定では exclude_large_cap=true なので checked、prtimes=false なので未checked付近
     assert 'value="4"' in html  # min_impact_for_notify の既定
     # edinet_enabled は統合カードに一本化。EDINETカードからは削除され、HTML中で1つだけ

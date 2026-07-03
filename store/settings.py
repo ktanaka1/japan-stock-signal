@@ -126,6 +126,11 @@ DEFAULTS: dict[str, str] = {
     # dc_corp を上場辞書(data/listed_companies.tsv)で名寄せし一致のみ収集。既定OFF（検証後ON）。
     "prtimes_enabled": "false",
     "prtimes_rss_url": "https://prtimes.jp/index.rdf",
+    # 逆引き昇格（rescue）: impact閾値で落としたが値上がり率ランキング上位に入ったシグナルを
+    # 翌朝の配信に昇格する（signaled層の交差救済）。capture_rate には別枠計上（自己言及防止）。
+    "rescue_enabled": "true",
+    # これ未満のimpactは市場反応があってもノイズとして昇格しない。
+    "rescue_min_impact": "3",
 }
 
 

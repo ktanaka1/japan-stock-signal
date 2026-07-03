@@ -22,7 +22,7 @@ from datetime import datetime, timedelta, timezone
 
 from store.db import migrate
 from store import coverage_runs
-from feedback import ranking, matcher, proposals
+from feedback import ranking, matcher, proposals, rescue
 
 logging.basicConfig(
     level=logging.INFO,
@@ -64,8 +64,10 @@ def run() -> None:
         return
 
     since_utc, until_utc = _window(now)
-    delivered, filtered, analyzed, tech_delivered = matcher.load_window(since_utc, until_utc)
-    detail = matcher.classify(items, delivered, filtered, analyzed, tech_delivered)
+    delivered, filtered, analyzed, tech_delivered, rescued = matcher.load_window(
+        since_utc, until_utc
+    )
+    detail = matcher.classify(items, delivered, filtered, analyzed, tech_delivered, rescued)
     summary = matcher.count_universe(detail)
     counts = summary["counts"]
     proposal = proposals.build_proposal(counts, summary["capture_rate"])
@@ -83,8 +85,13 @@ def run() -> None:
         capture_rate=summary["capture_rate"],
         detail=detail,
         proposal=proposal,
+        rescued=counts[matcher.STATUS_RESCUED],
     )
     logger.info("Coverage %s snapshot recorded (provisional): %s", ranking_date, proposal)
+
+    # 逆引き昇格（signaled層の交差救済）: impact閾値落ち×ランキング上位を翌朝配信へ昇格。
+    # 計測（上のrecord）の後に行う＝snapshot自体は昇格前の素の状態を記録する。
+    rescue.promote_rescues(detail, since_utc, until_utc, ranking_date)
 
 
 def finalize() -> None:
@@ -108,9 +115,11 @@ def finalize() -> None:
         rd = row["ranking_date"]                       # 'YYYY-MM-DD'(JST)
         base = datetime.strptime(rd, "%Y-%m-%d").replace(tzinfo=JST)
         since_utc, until_utc = _window(base)
-        delivered, filtered, analyzed, tech_delivered = matcher.load_window(since_utc, until_utc)
+        delivered, filtered, analyzed, tech_delivered, rescued = matcher.load_window(
+            since_utc, until_utc
+        )
         new_detail = matcher.reclassify_detail(
-            row["detail"], delivered, filtered, analyzed, tech_delivered
+            row["detail"], delivered, filtered, analyzed, tech_delivered, rescued
         )
         summary = matcher.count_universe(new_detail)
         counts = summary["counts"]
@@ -131,6 +140,7 @@ def finalize() -> None:
             capture_rate=new_rate,
             detail=new_detail,
             proposal=proposal,
+            rescued=counts[matcher.STATUS_RESCUED],
         )
         logger.info(
             "Coverage %s finalized: capture_rate %s -> %s (row id=%d)",

@@ -3,6 +3,7 @@
 status:
   delivered              -- ニュース版で配信済み（signals.notified_at あり）＝捕捉成功
   delivered_technical    -- テクニカル版(technical_runs)で配信済み＝捕捉成功（別チャンネル）
+  delivered_rescue       -- 逆引き昇格で救済配信（promoted_at + notified_at）。捕捉率には不算入
   signaled_not_delivered -- シグナル化したが未配信（impact閾値/大型株フィルタ等で除外）
   analyzed_neutral       -- 分析はしたがシグナル化せず（中立/銘柄なし）
   not_collected          -- 自システムのどこにも無い（収集網の外）
@@ -10,6 +11,9 @@ status:
 捕捉率はニュース版・テクニカル版の2チャンネル合算で測る（delivered + delivered_technical）。
 テクニカル版は寄り前(JST 8:00頃)に実行され FB窓の内側に入るため、その run の picks を
 「配信済み」として合算する（run_at が窓内の technical_runs を読む）。
+
+delivered_rescue は capture_rate に**含めない**: ランキングを見て昇格させたシグナルを
+ランキング捕捉として数えると指標が自己成就するため、rescued として別枠計上する。
 """
 from __future__ import annotations
 
@@ -21,6 +25,7 @@ from feedback.ranking import RankItem
 
 STATUS_DELIVERED = "delivered"
 STATUS_DELIVERED_TECH = "delivered_technical"
+STATUS_RESCUED = "delivered_rescue"
 STATUS_SIGNALED = "signaled_not_delivered"
 STATUS_NEUTRAL = "analyzed_neutral"
 STATUS_NOT_COLLECTED = "not_collected"
@@ -43,24 +48,34 @@ def _codes_from_picks(raw: str) -> list:
     return [str(p.get("code", "")).strip() for p in picks if p.get("code")]
 
 
-def load_window(since_utc: str, until_utc: str) -> Tuple[Set[str], Set[str], Set[str], Set[str]]:
-    """判定窓内の (配信済み, 未配信シグナル, 分析済み, テクニカル配信済み) コードを返す。
+def load_window(
+    since_utc: str, until_utc: str
+) -> Tuple[Set[str], Set[str], Set[str], Set[str], Set[str]]:
+    """判定窓内の (配信済み, 未配信シグナル, 分析済み, テクニカル配信済み, 逆引き救済済み)
+    コードを返す。
 
     既存テーブルは SELECT のみ。窓は signals.created_at / articles.fetched_at /
     technical_runs.run_at(UTC) で絞る。テクニカル版は寄り前に実行され窓の内側に入るため、
     その run の picks を「配信済み(別チャンネル)」として拾い、捕捉率の合算に使う。
+    逆引き昇格経由の配信（promoted_at + notified_at）は rescued として別集合に分ける
+    （capture_rate に含めない自己言及防止のため）。
     """
     delivered: Set[str] = set()
     filtered: Set[str] = set()
     analyzed: Set[str] = set()
     tech_delivered: Set[str] = set()
+    rescued: Set[str] = set()
 
     sig_rows = execute(
-        "SELECT stocks, notified_at FROM signals WHERE created_at >= ? AND created_at < ?",
+        "SELECT stocks, notified_at, promoted_at FROM signals "
+        "WHERE created_at >= ? AND created_at < ?",
         (since_utc, until_utc),
     ).rows
     for r in sig_rows:
-        target = delivered if r.get("notified_at") else filtered
+        if r.get("notified_at"):
+            target = rescued if r.get("promoted_at") else delivered
+        else:
+            target = filtered
         target.update(_codes_from_stocks(r["stocks"]))
 
     aa_rows = execute(
@@ -84,7 +99,7 @@ def load_window(since_utc: str, until_utc: str) -> Tuple[Set[str], Set[str], Set
     for r in tech_rows:
         tech_delivered.update(_codes_from_picks(r["picks"]))
 
-    return delivered, filtered, analyzed, tech_delivered
+    return delivered, filtered, analyzed, tech_delivered, rescued
 
 
 def _decide_status(
@@ -93,16 +108,19 @@ def _decide_status(
     filtered: Set[str],
     analyzed: Set[str],
     tech_delivered: Set[str],
+    rescued: Set[str] = frozenset(),
 ) -> str:
     """1銘柄の status を優先度で決める（classify と reclassify_detail で共用）。
 
-    優先度: ニュース配信 > テクニカル配信 > 未配信 > 中立 > 未収集
-    （実際に配信できた2チャンネルを捕捉成功として最優先）。
+    優先度: ニュース配信 > テクニカル配信 > 逆引き救済 > 未配信 > 中立 > 未収集
+    （実際に配信できた2チャンネルを捕捉成功として最優先。救済は事後配信なのでその次）。
     """
     if code in delivered:
         return STATUS_DELIVERED
     if code in tech_delivered:
         return STATUS_DELIVERED_TECH
+    if code in rescued:
+        return STATUS_RESCUED
     if code in filtered:
         return STATUS_SIGNALED
     if code in analyzed:
@@ -116,6 +134,7 @@ def classify(
     filtered: Set[str],
     analyzed: Set[str],
     tech_delivered: Set[str] = frozenset(),
+    rescued: Set[str] = frozenset(),
 ) -> List[dict]:
     """ランキング各銘柄に status を付けた detail を返す。"""
     detail = []
@@ -127,7 +146,9 @@ def classify(
             "market": it.market,
             "pct": it.change_pct,
             "in_universe": it.in_universe,
-            "status": _decide_status(it.code, delivered, filtered, analyzed, tech_delivered),
+            "status": _decide_status(
+                it.code, delivered, filtered, analyzed, tech_delivered, rescued
+            ),
         })
     return detail
 
@@ -138,6 +159,7 @@ def reclassify_detail(
     filtered: Set[str],
     analyzed: Set[str],
     tech_delivered: Set[str] = frozenset(),
+    rescued: Set[str] = frozenset(),
 ) -> List[dict]:
     """保存済み detail の各要素の status を最新の配信状況で再判定して返す。
 
@@ -148,17 +170,21 @@ def reclassify_detail(
     for d in detail:
         nd = dict(d)
         nd["status"] = _decide_status(
-            str(d.get("code", "")).strip(), delivered, filtered, analyzed, tech_delivered
+            str(d.get("code", "")).strip(), delivered, filtered, analyzed,
+            tech_delivered, rescued,
         )
         out.append(nd)
     return out
 
 
 def count_universe(detail: List[dict]) -> dict:
-    """母集団(in_universe=True)の status 別件数と捕捉率(2チャンネル合算)を集計する。"""
+    """母集団(in_universe=True)の status 別件数と捕捉率(2チャンネル合算)を集計する。
+
+    delivered_rescue は捕捉率に**含めない**（自己言及防止）。件数は counts に別枠計上する。
+    """
     uni = [d for d in detail if d["in_universe"]]
     counts = {
-        STATUS_DELIVERED: 0, STATUS_DELIVERED_TECH: 0,
+        STATUS_DELIVERED: 0, STATUS_DELIVERED_TECH: 0, STATUS_RESCUED: 0,
         STATUS_SIGNALED: 0, STATUS_NEUTRAL: 0, STATUS_NOT_COLLECTED: 0,
     }
     for d in uni:

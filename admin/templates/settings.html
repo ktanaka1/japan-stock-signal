@@ -172,12 +172,22 @@
             {% if settings.exclude_large_cap == 'true' %}checked{% endif %}>
           大型株のみのシグナルを配信しない<small>TOPIX Core30相当の大型株のみのシグナルを配信しない。現在: {{ '除外する' if settings.exclude_large_cap == 'true' else '除外しない' }}</small>
         </label>
+        <label>
+          <input type="checkbox" name="rescue_enabled" value="1"
+            {% if settings.rescue_enabled == 'true' %}checked{% endif %}>
+          🔁 逆引き昇格（交差救済）<small>impact閾値で落としたが値上がり率ランキング上位に入ったシグナルを翌朝配信へ昇格。現在: {{ '有効' if settings.rescue_enabled == 'true' else '無効' }}</small>
+        </label>
       </div>
     </div>
     <div class="form-group">
       <label>配信に必要な最小インパクト（0〜5）<br><small>これ未満のシグナルは配信しない。0で全件配信。現在: {{ settings.min_impact_for_notify }}</small></label>
       <input type="number" name="min_impact_for_notify" value="{{ settings.min_impact_for_notify }}"
         min="0" max="5" step="1" style="width:100px; margin-top:6px">
+    </div>
+    <div class="form-group">
+      <label>逆引き昇格の最小インパクト（1〜5）<br><small>これ未満のimpactは市場反応があってもノイズとして昇格しない。現在: {{ settings.rescue_min_impact }}</small></label>
+      <input type="number" name="rescue_min_impact" value="{{ settings.rescue_min_impact }}"
+        min="1" max="5" step="1" style="width:100px; margin-top:6px">
     </div>
   </div>
 

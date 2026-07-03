@@ -20,23 +20,26 @@ def record(
     detail: list,
     proposal: str,
     captured_tech: int = 0,
+    rescued: int = 0,
 ) -> int:
     """捕捉率の計測結果を1行記録し、採番された id を返す。
 
     captured はニュース版の配信件数、captured_tech はテクニカル版の配信件数。
-    capture_rate は両者の合算/母集団。
+    capture_rate は両者の合算/母集団。rescued（逆引き昇格で救済配信）は
+    capture_rate に含めない別枠計上（自己言及防止）。
     """
     result = execute(
         """
         INSERT INTO coverage_runs
             (ranking_date, ranking_type, top_n, universe, captured, captured_tech,
-             signaled, neutral, not_collected, capture_rate, detail, proposal, finalized)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+             signaled, neutral, not_collected, capture_rate, detail, proposal,
+             finalized, rescued)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
         """,
         (
             ranking_date, ranking_type, top_n, universe, captured, captured_tech,
             signaled, neutral, not_collected, capture_rate,
-            json.dumps(detail, ensure_ascii=False), proposal,
+            json.dumps(detail, ensure_ascii=False), proposal, rescued,
         ),
     )
     return result.last_row_id or 0
@@ -52,22 +55,24 @@ def update_finalize(
     capture_rate: Optional[float],
     detail: list,
     proposal: str,
+    rescued: int = 0,
 ) -> None:
     """暫定記録(finalized=0)を配信完了後の確定値で更新し finalized=1 にする。
 
     ranking_date / ranking_type / top_n / universe（母集団）は不変なので触らない。
-    配信状況に依存する captured 系・capture_rate・detail・proposal だけ上書きする。
+    配信状況に依存する captured 系・rescued・capture_rate・detail・proposal だけ上書きする。
     """
     execute(
         """
         UPDATE coverage_runs
         SET captured = ?, captured_tech = ?, signaled = ?, neutral = ?,
-            not_collected = ?, capture_rate = ?, detail = ?, proposal = ?, finalized = 1
+            not_collected = ?, capture_rate = ?, detail = ?, proposal = ?,
+            rescued = ?, finalized = 1
         WHERE id = ?
         """,
         (
             captured, captured_tech, signaled, neutral, not_collected, capture_rate,
-            json.dumps(detail, ensure_ascii=False), proposal, row_id,
+            json.dumps(detail, ensure_ascii=False), proposal, rescued, row_id,
         ),
     )
 
@@ -86,7 +91,7 @@ def get_unfinalized_before(ranking_date: str) -> List[dict]:
         """
         SELECT id, run_at, ranking_date, ranking_type, top_n, universe,
                captured, captured_tech, signaled, neutral, not_collected,
-               capture_rate, detail, proposal, finalized
+               capture_rate, detail, proposal, finalized, rescued
         FROM coverage_runs
         WHERE finalized = 0 AND ranking_date < ?
           AND id IN (
@@ -109,7 +114,7 @@ def get_recent(limit: int = 30) -> List[dict]:
         """
         SELECT id, run_at, ranking_date, ranking_type, top_n, universe,
                captured, captured_tech, signaled, neutral, not_collected,
-               capture_rate, detail, proposal, finalized
+               capture_rate, detail, proposal, finalized, rescued
         FROM coverage_runs
         ORDER BY ranking_date DESC, id DESC
         LIMIT ?
@@ -132,7 +137,7 @@ def get_page(limit: int, offset: int) -> tuple[list[dict], bool]:
         """
         SELECT id, run_at, ranking_date, ranking_type, top_n, universe,
                captured, captured_tech, signaled, neutral, not_collected,
-               capture_rate, detail, proposal, finalized
+               capture_rate, detail, proposal, finalized, rescued
         FROM coverage_runs
         WHERE id IN (SELECT MAX(id) FROM coverage_runs GROUP BY ranking_date)
         ORDER BY ranking_date DESC

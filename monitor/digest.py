@@ -57,12 +57,14 @@ def run() -> None:
 
         # インパクトスコアが閾値未満のシグナルは通知しない（旬の選別・柱3）。
         # min_impact=0 で全件通知（従来挙動）。閾値未満は notified_at を打たず未配信のまま残す。
+        # ただし逆引き昇格（promoted_at あり＝閾値落ちだが市場が反応した交差救済）は閾値を免除する。
         try:
             min_impact = int(cfg.get("min_impact_for_notify"))
         except (TypeError, ValueError):
             min_impact = 0
         exclude_large = cfg.get("exclude_large_cap").lower() == "true"
-        items = [s for s in all_unnotified if (s.get("impact") or 0) >= min_impact]
+        items = [s for s in all_unnotified
+                 if (s.get("impact") or 0) >= min_impact or s.get("promoted_at")]
         # 大型株(全銘柄が大型)のシグナルを除外する（柱1: マクロ連動ノイズ対策）。
         if exclude_large:
             items = [s for s in items if not all_large_cap(s.get("stocks") or [])]
@@ -200,6 +202,9 @@ def _format_item(signal: dict) -> str:
         chart = quotes.chart_page_url(s.get("code"))
         if chart:
             lines.append(f"　📈 {chart}")
+    if signal.get("promote_reason"):
+        # 逆引き昇格分は「AIには凡庸に見えたが市場が反応した」根拠を明示する
+        lines.append(f"　🔁 逆引き昇格（{signal['promote_reason']}）")
     lines.append(f"　{signal['summary']}")
     lines.append(f"　{signal['url']}")
     return "\n".join(lines)

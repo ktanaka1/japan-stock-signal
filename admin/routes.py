@@ -455,8 +455,9 @@ async def settings_technical_save(request: Request):
 _FILTER_NUMERIC_SPECS = [
     # 0=全件配信（monitor/digest.py の min_impact=0 と同義）を画面から選べるよう下限は0
     ("min_impact_for_notify", int, 0, 5, "配信に必要な最小インパクト(0=全件, 1〜5)"),
+    ("rescue_min_impact", int, 1, 5, "逆引き昇格の最小インパクト(1〜5)"),
 ]
-_FILTER_BOOL_KEYS = ["prtimes_enabled", "edinet_enabled", "exclude_large_cap"]
+_FILTER_BOOL_KEYS = ["prtimes_enabled", "edinet_enabled", "exclude_large_cap", "rescue_enabled"]
 
 
 @router.post("/settings/filters")
