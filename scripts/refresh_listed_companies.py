@@ -75,6 +75,10 @@ def _parse(xls_bytes: bytes) -> list[tuple[str, str]]:
         name = str(sh.cell_value(r, i_name)).strip()
         if not code or not name:
             continue
+        # 普通株は4桁（新形式 "130A" 含む）。5桁は優先株・社債型種類株式
+        # （例: 25935 伊藤園第１種優先株式）で名寄せ対象外なので除外する。
+        if len(code) != 4:
+            continue
         rows.append((code, name))
     rows.sort(key=lambda x: x[0])
     return rows

@@ -43,15 +43,18 @@ _SPACE_RE = re.compile(r"\s+")
 # "・" は NFKC で変化しないため明示的に対象にする。
 _PUNCT_RE = re.compile(r"[・･]")
 
-# モジュールキャッシュ（プロセス内で1回だけロード）
-_dict_cache: Optional[dict[str, tuple[str, str]]] = None
+# 接尾辞を剥がしたキーの最小長。剥がした結果が短すぎるキー（例: ＣＥホールディングス→"ce"）は
+# 汎用語と衝突して誤コード付与の面になるため、剥がしキー側の辞書には載せない（完全一致側は残る）。
+_MIN_STRIPPED_KEY_LEN = 3
+
+# モジュールキャッシュ（プロセス内で1回だけロード）。(完全一致辞書, 接尾辞剥がし辞書)
+_dict_cache: Optional[tuple[dict[str, tuple[str, str]], dict[str, tuple[str, str]]]] = None
 
 
-def normalize_name(name: str) -> str:
-    """社名を突合用キーに正規化する。
+def _normalize_base(name: str) -> str:
+    """社名を突合用キーに正規化する（接尾辞は剥がさない一次キー）。
 
-    手順: NFKC（全角→半角・全角空白→半角空白）→ 法人格/接尾辞の除去 → 空白除去 → 小文字化。
-    返り値が空文字になる場合は突合不能（呼び出し側で破棄する）。
+    手順: NFKC（全角→半角・全角空白→半角空白）→ 法人格の除去 → 記号/空白除去 → 小文字化。
     """
     if not name:
         return ""
@@ -60,8 +63,11 @@ def normalize_name(name: str) -> str:
     for token in _CORP_TOKENS:
         s = s.replace(token, "")
     s = _PUNCT_RE.sub("", s)
-    s = _SPACE_RE.sub("", s).lower()
-    # 接尾辞（HD/ホールディングス等）は末尾のみ除去（社名中の一致を巻き込まない）
+    return _SPACE_RE.sub("", s).lower()
+
+
+def _strip_suffix(s: str) -> str:
+    """接尾辞（HD/ホールディングス/グループ等）を末尾のみ剥がす（社名中の一致を巻き込まない）。"""
     changed = True
     while changed:
         changed = False
@@ -72,14 +78,30 @@ def normalize_name(name: str) -> str:
     return s
 
 
-def _load_dict(path: Path = _TSV_PATH) -> dict[str, tuple[str, str]]:
-    """TSV を読み込み {正規化キー: (4桁コード, 正式社名)} を構築する。
+def normalize_name(name: str) -> str:
+    """社名を突合用キーに正規化する（法人格・接尾辞とも除去した最終形）。
 
-    - 同一の正規化キーに複数の異なるコードが衝突した場合、その曖昧キーは除外する
-      （誤同定を避けるため保守的に捨てる）。同一コードの重複は無害なので許容。
+    返り値が空文字になる場合は突合不能（呼び出し側で破棄する）。
     """
-    result: dict[str, tuple[str, str]] = {}
-    ambiguous: set[str] = set()
+    return _strip_suffix(_normalize_base(name))
+
+
+def _load_dict(path: Path = _TSV_PATH) -> tuple[dict[str, tuple[str, str]], dict[str, tuple[str, str]]]:
+    """TSV を読み込み (完全一致辞書, 接尾辞剥がし辞書) を構築する。
+
+    二段構えの理由: 剥がしキーだけだと「ソフトバンク(9434)」と「ソフトバンクグループ(9984)」の
+    ような**別法人の上場2社**が同一キーに合流し、曖昧キーとして両方破棄されてしまう。
+    一次キー（接尾辞を剥がさない完全一致）を先に引くことで、こうしたペアも一意に同定できる。
+
+    - 各辞書とも、同一キーに複数の異なるコードが衝突した場合はその曖昧キーを除外する
+      （誤同定を避けるため保守的に捨てる）。同一コードの重複は無害なので許容。
+    - 剥がしキーは _MIN_STRIPPED_KEY_LEN 未満なら載せない（"ce" 等の汎用語化した断片は
+      非上場社名との偶然一致＝誤コード付与の面になるため）。
+    """
+    exact: dict[str, tuple[str, str]] = {}
+    stripped: dict[str, tuple[str, str]] = {}
+    ambiguous_exact: set[str] = set()
+    ambiguous_stripped: set[str] = set()
     try:
         with path.open(encoding="utf-8", newline="") as f:
             reader = csv.DictReader(f, delimiter="\t")
@@ -88,28 +110,40 @@ def _load_dict(path: Path = _TSV_PATH) -> dict[str, tuple[str, str]]:
                 name = (row.get("name") or "").strip()
                 if not code or not name:
                     continue
-                key = normalize_name(name)
-                if not key:
+                base = _normalize_base(name)
+                if not base:
                     continue
-                if key in result and result[key][0] != code:
-                    ambiguous.add(key)
+                if base in exact and exact[base][0] != code:
+                    ambiguous_exact.add(base)
+                else:
+                    exact.setdefault(base, (code, name))
+                key = _strip_suffix(base)
+                if not key or len(key) < _MIN_STRIPPED_KEY_LEN:
                     continue
-                result.setdefault(key, (code, name))
+                if key in stripped and stripped[key][0] != code:
+                    ambiguous_stripped.add(key)
+                else:
+                    stripped.setdefault(key, (code, name))
     except FileNotFoundError:
         logger.warning("listed_companies.tsv not found at %s; lookups disabled", path)
-        return {}
+        return {}, {}
     except Exception:
         logger.warning("failed to load listed_companies.tsv; lookups disabled", exc_info=True)
-        return {}
+        return {}, {}
 
-    for key in ambiguous:
-        result.pop(key, None)
-    logger.info("Loaded %d listed companies (%d ambiguous keys dropped)",
-                len(result), len(ambiguous))
-    return result
+    for key in ambiguous_exact:
+        exact.pop(key, None)
+    for key in ambiguous_stripped:
+        stripped.pop(key, None)
+    logger.info(
+        "Loaded %d listed companies (exact) / %d (suffix-stripped); "
+        "%d + %d ambiguous keys dropped",
+        len(exact), len(stripped), len(ambiguous_exact), len(ambiguous_stripped),
+    )
+    return exact, stripped
 
 
-def _get_dict() -> dict[str, tuple[str, str]]:
+def _get_dict() -> tuple[dict[str, tuple[str, str]], dict[str, tuple[str, str]]]:
     global _dict_cache
     if _dict_cache is None:
         _dict_cache = _load_dict()
@@ -119,12 +153,20 @@ def _get_dict() -> dict[str, tuple[str, str]]:
 def lookup(company_name: str) -> Optional[tuple[str, str]]:
     """発表企業名を正規化して上場辞書に完全一致したら (4桁コード, 正式社名) を返す。
 
+    一次キー（接尾辞を剥がさない）→ 二次キー（剥がす）の順で引く。
     一致しなければ None（＝非上場 or 表記ゆれ。呼び出し側は破棄する）。
     """
-    key = normalize_name(company_name)
+    exact, stripped = _get_dict()
+    base = _normalize_base(company_name)
+    if not base:
+        return None
+    hit = exact.get(base)
+    if hit:
+        return hit
+    key = _strip_suffix(base)
     if not key:
         return None
-    return _get_dict().get(key)
+    return stripped.get(key)
 
 
 def reset_cache() -> None:

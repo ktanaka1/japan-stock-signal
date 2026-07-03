@@ -6,10 +6,17 @@
   - 辞書ローダ（TSVロード・曖昧キー除外・未一致時に安全に破棄）
   - prtimes_enabled="false" で完全 no-op
 """
+import os
 import textwrap
 from pathlib import Path
 
 import feedparser
+
+# --- 環境ガード: 本番D1へ繋がない（CLAUDE.md） ---
+# 本ファイルは migrate() + settings 書き込み（prtimes_enabled=true）を行うため、
+# ガード無しで素の pytest を打つと本番D1の設定が書き換わる。
+assert os.getenv("FORCE_LOCAL_DB") == "1", "FORCE_LOCAL_DB=1 を必須にする（本番D1誤接続防止）"
+assert os.getenv("DB_PATH"), "DB_PATH を指定すること"
 
 from store import listed_companies as lc
 from store import settings as cfg
@@ -111,6 +118,28 @@ def test_loader_drops_ambiguous_keys(tmp_path):
 def test_loader_missing_file_disables_lookups(tmp_path):
     lc.load_from(tmp_path / "nope.tsv")
     assert lc.lookup("株式会社ノジマ") is None
+
+
+def test_two_tier_lookup_separates_hd_group_pairs(tmp_path):
+    """別法人の上場2社（親グループ/事業会社）が接尾辞剥がしで合流しても、
+    一次キー（剥がさない完全一致）で一意に同定できる（旧実装は両方破棄していた）。"""
+    p = tmp_path / "sb.tsv"
+    p.write_text("code\tname\n9434\tソフトバンク\n9984\tソフトバンクグループ\n", encoding="utf-8")
+    lc.load_from(p)
+    assert lc.lookup("ソフトバンク株式会社") == ("9434", "ソフトバンク")
+    assert lc.lookup("ソフトバンクグループ株式会社") == ("9984", "ソフトバンクグループ")
+    # 剥がしキー「ソフトバンク」は2社衝突で曖昧のまま → どちらとも断定しない表記は不一致
+    assert lc.lookup("ソフトバンクHD") is None
+
+
+def test_short_stripped_key_not_indexed(tmp_path):
+    """接尾辞を剥がした結果が短すぎるキー（例: ＣＥホールディングス→"ce"）は
+    汎用語との偶然一致＝誤コード付与を避けるため剥がし辞書に載せない。完全一致は引ける。"""
+    p = tmp_path / "ce.tsv"
+    p.write_text("code\tname\n4320\tＣＥホールディングス\n", encoding="utf-8")
+    lc.load_from(p)
+    assert lc.lookup("ＣＥホールディングス株式会社") == ("4320", "ＣＥホールディングス")
+    assert lc.lookup("CE株式会社") is None  # "ce" では引けない（誤爆面を塞ぐ）
 
 
 # ---------------- 収集（_fetch_prtimes） ----------------

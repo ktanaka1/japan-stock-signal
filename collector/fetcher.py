@@ -67,12 +67,9 @@ def fetch_all() -> tuple[list[Article], bool]:
         except Exception:
             logger.warning("Failed to fetch %s", url, exc_info=True)
 
-    # --- PR TIMES（RDF・上場辞書で名寄せ一致のみ取込） ---
+    # --- PR TIMES（RDF・上場辞書で名寄せ一致のみ取込。件数ログは _fetch_prtimes 内） ---
     try:
-        prtimes = _fetch_prtimes()
-        if prtimes:
-            logger.info("Fetched %d listed entries from PR TIMES", len(prtimes))
-        articles.extend(prtimes)
+        articles.extend(_fetch_prtimes())
     except Exception:
         logger.warning("Failed to fetch PR TIMES", exc_info=True)
 
@@ -143,6 +140,11 @@ def _fetch_prtimes() -> list[Article]:
 
     url = cfg.get("prtimes_rss_url") or "https://prtimes.jp/index.rdf"
     feed = feedparser.parse(url)
+    # feedparser はネットワーク失敗でも例外を投げず空を返すため、無音だと
+    # 「0一致」と「フィード死亡」が運用上区別できない。bozo で明示的に警告する。
+    if getattr(feed, "bozo", False) and not feed.entries:
+        logger.warning("PR TIMES feed unavailable or malformed: %s",
+                       getattr(feed, "bozo_exception", None))
 
     articles: list[Article] = []
     for entry in feed.entries:
@@ -162,6 +164,9 @@ def _fetch_prtimes() -> list[Article]:
         article.security_code = code
         article.security_name = name
         articles.append(article)
+    # 有効時は0一致でも件数を残す（「無効」「0一致」「フィード死亡」を切り分ける手掛かり）
+    logger.info("PR TIMES: %d entries fetched, %d matched listed companies",
+                len(feed.entries), len(articles))
     return articles
 
 
