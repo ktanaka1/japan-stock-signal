@@ -10,10 +10,12 @@ from store.models import Article
 logger = logging.getLogger(__name__)
 
 # やのしんWEB-API（TDnet）。RSS→JSON に切替（document_url/company_code/url_xbrl を得るため）。
-# limit は settings.tdnet_fetch_limit（既定300）で可変。引け後(15時台)は開示が集中し
-# 直近100件では1時間の取得間に溢れる（窓溢れ）ため、窓を広げて取りこぼしを防ぐ。
+# limit は settings.tdnet_fetch_limit（既定600）で可変。引け後(15時台)は開示が集中し、
+# cronスキップで実行間隔が数時間空くと「直近300件」窓からも溢れる実害が出た
+# （2026-06-26: 開示649件/日×TDnet取得1回失敗→15:30分の開示2件が窓外に流出）。
+# 600 なら重い日の1日分をほぼ1回でカバーできる（limit=600/1000 の応答は実測確認済み）。
 _TDNET_JSON_URL = "https://webapi.yanoshin.jp/webapi/tdnet/list/recent.json?limit={limit}"
-_TDNET_LIMIT_DEFAULT = 300
+_TDNET_LIMIT_DEFAULT = 600
 # 従来RSS（系統B扱い・本文取得しない）
 _DEFAULT_RSS_FEEDS = [
     "https://news.yahoo.co.jp/rss/topics/business.xml",

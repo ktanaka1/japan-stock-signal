@@ -99,8 +99,9 @@ DEFAULTS: dict[str, str] = {
     "exclude_large_cap": "true",
     # TDnet取得がこの回数連続で失敗したら障害アラートメールを送る（collector）。
     "tdnet_fail_alert_threshold": "3",
-    # TDnet(やのしん)から1回に取得する開示件数。引け後の窓溢れ対策で既定300。
-    "tdnet_fetch_limit": "300",
+    # TDnet(やのしん)から1回に取得する開示件数。引け後の窓溢れ対策で既定600。
+    # 300だと重い日（2026-06-26は649件）にcronスキップが重なると窓から溢れる実害が出た。
+    "tdnet_fetch_limit": "600",
     # テクニカル版 朝のシグナル（価格/出来高駆動の別系統スキャナ）の検知パラメータ。
     "tech_min_change_pct": "5.0",      # 値上がり率の下限(%)
     "tech_min_volume_surge": "2.0",    # 出来高急増倍率の下限(倍。当日出来高/直近平均)
