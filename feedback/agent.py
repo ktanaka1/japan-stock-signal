@@ -39,14 +39,24 @@ _TOP_N = 30
 
 
 def _window(base_jst: datetime) -> tuple[str, str]:
-    """基準JST日付 D の判定窓 [D-1 15:00 JST, D 15:00 JST) を UTC 文字列で返す。
+    """基準JST日付 D の判定窓 [前営業日 15:00 JST, D 15:00 JST) を UTC 文字列で返す。
 
     D（ランキング日）の動意に対し『事前/同時に把握していたか』を見る窓。base_jst の
     日付部分だけを使う（時刻は無視）。DBの created_at / fetched_at は UTC 保存なので
     UTC に変換して比較する。
+
+    起点は暦日の前日ではなく**前営業日**（土日をスキップ。祝日は未対応）。
+    暦日基準だと月曜の窓が [日曜15:00, 月曜15:00) となり、金曜引け後に開示されて
+    金曜夜に収集・月曜朝に配信した材料が窓の外に落ちる（月曜の捕捉率が系統的に
+    過小評価され、逆引き昇格も金曜材料×月曜動意の定番パターンを拾えない）。
+    実例: 2026-06-26(金)引け後の固定資産譲渡益開示→6-29(月)急騰は、月曜朝に
+    配信成功していたのに not_collected と誤計上されていた。
     """
     d0 = base_jst.replace(hour=0, minute=0, second=0, microsecond=0)  # D 00:00 JST
-    since = (d0 - timedelta(hours=9)).astimezone(timezone.utc)        # D-1 15:00 JST
+    prev = d0 - timedelta(days=1)
+    while prev.weekday() >= 5:  # 土日をスキップして前営業日へ（月曜→金曜）
+        prev -= timedelta(days=1)
+    since = (prev + timedelta(hours=15)).astimezone(timezone.utc)     # 前営業日 15:00 JST
     until = (d0 + timedelta(hours=15)).astimezone(timezone.utc)       # D 15:00 JST
     fmt = "%Y-%m-%d %H:%M:%S"
     return since.strftime(fmt), until.strftime(fmt)

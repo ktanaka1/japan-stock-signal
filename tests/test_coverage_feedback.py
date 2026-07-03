@@ -102,6 +102,29 @@ def test_count_universe_combines_news_and_technical():
     assert summary["capture_rate"] == round(2 / 3, 4)  # 2チャンネル合算
 
 
+# ---- 判定窓（前営業日 15:00 起点） ----------------------------------------------
+
+def test_window_weekday_starts_previous_day():
+    """火〜金は従来どおり前日15:00 JST起点（= UTC 06:00）。"""
+    from datetime import datetime
+    from feedback import agent
+    base = datetime(2026, 6, 30, 16, 30, tzinfo=agent.JST)   # 火曜
+    since, until = agent._window(base)
+    assert since == "2026-06-29 06:00:00"   # 月曜 15:00 JST
+    assert until == "2026-06-30 06:00:00"   # 火曜 15:00 JST
+
+
+def test_window_monday_spans_back_to_friday():
+    """月曜は前営業日=金曜15:00起点。金曜引け後開示→金曜夜収集→月曜朝配信が窓に入る
+    （暦日基準だと日曜15:00起点となり、金曜材料×月曜動意の定番パターンが全て窓外に落ちる）。"""
+    from datetime import datetime
+    from feedback import agent
+    base = datetime(2026, 6, 29, 16, 30, tzinfo=agent.JST)   # 月曜
+    since, until = agent._window(base)
+    assert since == "2026-06-26 06:00:00"   # 金曜 15:00 JST
+    assert until == "2026-06-29 06:00:00"   # 月曜 15:00 JST
+
+
 # ---- 窓内ロード（ローカルDB・読み取り） -----------------------------------------
 
 def test_load_window_reads_signals_and_analyses():
