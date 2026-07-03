@@ -46,4 +46,7 @@ jobs:
         env:
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
       - name: 捕捉率を確定（配信完了後・前営業日以前の暫定行を最新の配信状況で再判定）
+        # 本務は配信。finalize 失敗時は暫定のまま残り次回配信後に確定されるので、workflow は失敗にしない
         run: python -m feedback.agent --finalize
+        timeout-minutes: 5
+        continue-on-error: true
