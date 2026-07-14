@@ -47,9 +47,15 @@ def fetch_all() -> tuple[list[Article], bool]:
     # --- TDnet（JSON） ---
     try:
         tdnet = _fetch_tdnet_json()
-        logger.info("Fetched %d entries from TDnet JSON", len(tdnet))
         articles.extend(tdnet)
-        tdnet_ok = True
+        if tdnet:
+            logger.info("Fetched %d entries from TDnet JSON", len(tdnet))
+            tdnet_ok = True
+        else:
+            # recent窓は過去分も含むため0件は正常時にあり得ない。HTTP 200の空応答を
+            # 成功扱いすると連続失敗の監視をすり抜ける（2026-06-26に空応答→無検知→
+            # 窓溢れで開示2件を取りこぼした実害）。失敗として障害ストリークに乗せる。
+            logger.warning("TDnet JSON returned 0 entries; treating as fetch failure")
     except Exception:
         logger.warning("Failed to fetch TDnet JSON", exc_info=True)
 

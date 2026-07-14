@@ -86,3 +86,26 @@ def test_recovery_before_alert_no_recovery_mail(monkeypatch):
     agent._check_tdnet_health(True, "t2")    # 復旧するが通知不要
     assert alerts == [] and recoveries == []
     assert cfg.get("tdnet_fail_streak") == "0"
+
+
+def test_fetch_all_empty_tdnet_is_failure(monkeypatch):
+    """HTTP 200でも0件応答は取得失敗扱い（2026-06-26の無音空応答→窓溢れ事故の再発防止）。"""
+    _fresh()
+    from collector import fetcher
+    monkeypatch.setattr(fetcher, "_fetch_tdnet_json", lambda: [])
+    monkeypatch.setattr(fetcher, "_fetch_feed", lambda url: [])
+    monkeypatch.setattr(fetcher, "_fetch_prtimes", lambda: [])
+    _, tdnet_ok = fetcher.fetch_all()
+    assert tdnet_ok is False
+
+
+def test_fetch_all_nonempty_tdnet_is_ok(monkeypatch):
+    _fresh()
+    from collector import fetcher
+    from collector.fetcher import Article
+    art = Article(title="t", body="", url="https://example.com/x")
+    monkeypatch.setattr(fetcher, "_fetch_tdnet_json", lambda: [art])
+    monkeypatch.setattr(fetcher, "_fetch_feed", lambda url: [])
+    monkeypatch.setattr(fetcher, "_fetch_prtimes", lambda: [])
+    articles, tdnet_ok = fetcher.fetch_all()
+    assert tdnet_ok is True and len(articles) == 1
