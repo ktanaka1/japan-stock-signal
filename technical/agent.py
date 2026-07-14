@@ -90,11 +90,13 @@ def _make_pick(it: "ranking.RankItem", m: dict, source: str) -> dict:
 
 
 def _scan(min_change: float, min_surge: float, top_n: int, exclude: set,
-          min_turnover_yen: float, scan_volume: bool, vol_min_change: float) -> List[dict]:
+          min_turnover_yen: float, scan_volume: bool, vol_min_change: float,
+          vol_min_surge: float) -> List[dict]:
     """2系統のランキングから候補を抽出する（同一コードは up 優先で1件に統合）。
 
     - 値上がり率(up): 値上がり率≥min_change かつ 出来高急増≥min_surge
-    - 出来高(volume): 上昇方向(値上がり率≥vol_min_change) かつ 出来高急増≥min_surge（任意・第2源）
+    - 出来高(volume): 上昇方向(値上がり率≥vol_min_change) かつ 出来高急増≥vol_min_surge（任意・第2源）
+      出来高上位は恒常的に商いが多く自平均比の急増が出にくいため、surge下限はup源と分離する
     両系統とも「売買代金≥min_turnover_yen」を必須化し、薄商いの見せかけ急増を弾く。
     """
     picks: dict[str, dict] = {}                     # code -> pick（dedup）
@@ -105,8 +107,8 @@ def _scan(min_change: float, min_surge: float, top_n: int, exclude: set,
             metrics_cache[code] = quotes.get_daily_metrics(code)
         return metrics_cache[code]
 
-    def _qualifies(m) -> bool:
-        if not m or m.get("surge") is None or m["surge"] < min_surge:
+    def _qualifies(m, surge_floor: float) -> bool:
+        if not m or m.get("surge") is None or m["surge"] < surge_floor:
             return False
         t = _turnover(m)
         if t is None or t < min_turnover_yen:       # 流動性フロア（薄商い除外）
@@ -120,7 +122,7 @@ def _scan(min_change: float, min_surge: float, top_n: int, exclude: set,
         if it.change_pct is None or it.change_pct < min_change:
             continue
         m = _metrics(it.code)
-        if _qualifies(m):
+        if _qualifies(m, min_surge):
             picks[it.code] = _make_pick(it, m, "up")
 
     # 出来高ランキング（新規・第2源）。上昇方向のみ。up で既出のコードは飛ばす。
@@ -131,7 +133,7 @@ def _scan(min_change: float, min_surge: float, top_n: int, exclude: set,
             if it.change_pct is None or it.change_pct < vol_min_change:
                 continue
             m = _metrics(it.code)
-            if _qualifies(m):
+            if _qualifies(m, vol_min_surge):
                 picks[it.code] = _make_pick(it, m, "vol")
 
     return list(picks.values())
@@ -199,13 +201,15 @@ def run() -> None:
         min_turnover_yen = _float_cfg("tech_min_turnover_oku", 1.0) * 1e8
         scan_volume = cfg.get("tech_scan_volume").lower() == "true"
         vol_min_change = _float_cfg("tech_vol_min_change_pct", 3.0)
+        vol_min_surge = _float_cfg("tech_vol_min_surge", 1.3)
 
         picks = _scan(min_change, min_surge, top_n, exclude,
-                      min_turnover_yen, scan_volume, vol_min_change)
+                      min_turnover_yen, scan_volume, vol_min_change, vol_min_surge)
         logger.info(
             "Technical scan: %d picks (min_change=%.1f%% min_surge=%.1fx "
-            "turnover>=%.1f億 scan_volume=%s dedup=%s)",
-            len(picks), min_change, min_surge, min_turnover_yen / 1e8, scan_volume, dedup,
+            "vol_min_surge=%.1fx turnover>=%.1f億 scan_volume=%s dedup=%s)",
+            len(picks), min_change, min_surge, vol_min_surge,
+            min_turnover_yen / 1e8, scan_volume, dedup,
         )
 
         if not recipients:

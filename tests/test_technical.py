@@ -79,7 +79,8 @@ def test_scan_filters(monkeypatch):
     monkeypatch.setattr(agent.quotes, "get_daily_metrics",
                         lambda code: metrics.get(code, _metrics(3.0)))
     picks = agent._scan(min_change=5.0, min_surge=2.0, top_n=30, exclude={"6666"},
-                        min_turnover_yen=1e8, scan_volume=False, vol_min_change=3.0)
+                        min_turnover_yen=1e8, scan_volume=False, vol_min_change=3.0,
+                        vol_min_surge=2.0)
     codes = [p["code"] for p in picks]
     assert codes == ["1111"]
     assert picks[0]["source"] == "up"
@@ -100,7 +101,23 @@ def test_scan_adds_volume_source(monkeypatch):
     monkeypatch.setattr(agent.quotes, "get_daily_metrics",
                         lambda code: metrics.get(code, _metrics(3.0)))
     picks = agent._scan(min_change=5.0, min_surge=2.0, top_n=30, exclude=set(),
-                        min_turnover_yen=1e8, scan_volume=True, vol_min_change=3.0)
+                        min_turnover_yen=1e8, scan_volume=True, vol_min_change=3.0,
+                        vol_min_surge=2.0)
+    assert [(p["code"], p["source"]) for p in picks] == [("8888", "vol")]
+
+
+def test_scan_vol_surge_separated(monkeypatch):
+    # vol源はup源より緩いsurge下限で通る（出来高上位は自平均比の急増が出にくいため分離）。
+    # surge1.5: up源(下限2.0)では落ち、vol源(下限1.3)では採用される。
+    up_items = [_item("1111", "急増不足", 12.0)]               # change OK だが surge1.5<2.0 → up不採用
+    vol_items = [_item("8888", "商い恒常多", 4.0)]             # surge1.5≥1.3 → vol採用
+    def _fetch(kind="up", **k):
+        return vol_items if kind == "volume" else up_items
+    monkeypatch.setattr(agent.ranking, "fetch_ranking", _fetch)
+    monkeypatch.setattr(agent.quotes, "get_daily_metrics", lambda code: _metrics(1.5))
+    picks = agent._scan(min_change=5.0, min_surge=2.0, top_n=30, exclude=set(),
+                        min_turnover_yen=1e8, scan_volume=True, vol_min_change=3.0,
+                        vol_min_surge=1.3)
     assert [(p["code"], p["source"]) for p in picks] == [("8888", "vol")]
 
 
@@ -110,7 +127,8 @@ def test_scan_dedup_up_priority(monkeypatch):
     monkeypatch.setattr(agent.ranking, "fetch_ranking", lambda *a, **k: same)
     monkeypatch.setattr(agent.quotes, "get_daily_metrics", lambda code: _metrics(4.0))
     picks = agent._scan(min_change=5.0, min_surge=2.0, top_n=30, exclude=set(),
-                        min_turnover_yen=1e8, scan_volume=True, vol_min_change=3.0)
+                        min_turnover_yen=1e8, scan_volume=True, vol_min_change=3.0,
+                        vol_min_surge=2.0)
     assert len(picks) == 1 and picks[0]["source"] == "up"
 
 

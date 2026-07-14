@@ -40,6 +40,7 @@ def _post(client, **overrides):
         "tech_top_n": "30",
         "tech_min_turnover_oku": "1.0",
         "tech_vol_min_change_pct": "3.0",
+        "tech_vol_min_surge": "1.3",
         "tech_scan_volume": "1",
         "tech_dedup_with_news": "1",
     }

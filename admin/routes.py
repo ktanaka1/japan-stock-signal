@@ -393,6 +393,7 @@ _TECH_NUMERIC_SPECS = [
     ("tech_top_n", int, 1, 100, "ランキング上位件数"),
     ("tech_min_turnover_oku", float, 0.0, 10000.0, "売買代金フロア(億円)"),
     ("tech_vol_min_change_pct", float, 0.0, 100.0, "出来高源の値上がり率下限(%)"),
+    ("tech_vol_min_surge", float, 0.0, 100.0, "出来高源の急増倍率下限(倍)"),
 ]
 _TECH_BOOL_KEYS = ["tech_scan_volume", "tech_dedup_with_news"]
 

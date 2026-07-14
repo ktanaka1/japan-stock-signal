@@ -108,9 +108,14 @@
           min="0" max="100" step="0.5" style="width:100px; margin-top:6px">
       </div>
       <div class="form-group">
-        <label>出来高急増倍率の下限（倍）<br><small>当日出来高 / 直近平均。両源共通。現在: {{ settings.tech_min_volume_surge }}</small></label>
+        <label>出来高急増倍率の下限（倍・値上り源）<br><small>当日出来高 / 直近平均。現在: {{ settings.tech_min_volume_surge }}</small></label>
         <input type="number" name="tech_min_volume_surge" value="{{ settings.tech_min_volume_surge }}"
           min="0" max="100" step="0.5" style="width:100px; margin-top:6px">
+      </div>
+      <div class="form-group">
+        <label>出来高源の急増倍率下限（倍）<br><small>出来高上位は恒常的に商いが多く自平均比が出にくいため値上り源と分離。現在: {{ settings.tech_vol_min_surge }}</small></label>
+        <input type="number" name="tech_vol_min_surge" value="{{ settings.tech_vol_min_surge }}"
+          min="0" max="100" step="0.1" style="width:100px; margin-top:6px">
       </div>
       <div class="form-group">
         <label>ランキング上位件数<br><small>up/出来高 双方の母集団。現在: {{ settings.tech_top_n }}</small></label>

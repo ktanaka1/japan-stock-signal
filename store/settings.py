@@ -113,6 +113,10 @@ DEFAULTS: dict[str, str] = {
     "tech_scan_volume": "true",
     # 出来高源の値上がり率下限(%)。up源(tech_min_change_pct)より緩く早期の上昇を拾う。
     "tech_vol_min_change_pct": "3.0",
+    # 出来高源専用の急増倍率下限(倍)。出来高ランキング上位は恒常的に商いが多く
+    # 自分の直近平均の2倍(tech_min_volume_surge)を超えることが稀なため、up源と分離する
+    # （2026-07-14実測: 共用2.0だと12営業日でvol pickが3件しか生まれず成功基準の判定不能）。
+    "tech_vol_min_surge": "1.3",
     # EDINET 大量保有報告書アラート（需給シグナル・別レーン）。
     "edinet_enabled": "false",              # キー設定後に有効化
     "edinet_new_only": "true",              # 新規(初回5%超)のみ配信。変更報告書は方向不明なので既定で抑制
