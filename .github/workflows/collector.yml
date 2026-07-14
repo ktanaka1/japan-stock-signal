@@ -11,7 +11,8 @@ on:
 jobs:
   collect:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # 決算集中日は引け後開示が数百件になり5分では溢れる（2026-07-14実測: 459件で2連続タイムアウト）
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

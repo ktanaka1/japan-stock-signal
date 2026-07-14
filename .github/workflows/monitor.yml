@@ -11,7 +11,8 @@ on:
 jobs:
   monitor:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 決算集中日はバックログが15分を超える（2026-07-14実測: 459件の消化に4巡・約50分）
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
